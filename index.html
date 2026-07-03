@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgroGestión 26/27</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI",system-ui,sans-serif;background:#F0EBE1;color:#1a1a1a;min-height:100vh}
+.header{background:#1A3C2E;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,0.3)}
+.header h1{color:#C9A84C;font-size:19px;font-weight:900}
+.header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tc-badge{background:rgba(201,168,76,0.2);border:1px solid #C9A84C;color:#C9A84C;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer}
+.tabs{background:#2D6A4F;display:flex;overflow-x:auto;padding:0 12px;gap:2px}
+.tab{background:transparent;color:rgba(255,255,255,0.65);border:none;padding:11px 16px;cursor:pointer;font-size:12px;font-weight:700;border-radius:8px 8px 0 0;white-space:nowrap;transition:all 0.15s}
+.tab.active{background:#C9A84C;color:#1A3C2E}
+.page{display:none;max-width:1200px;margin:0 auto;padding:18px 14px}
+.page.active{display:block}
+.kpi-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.kpi{background:#fff;border-radius:12px;padding:14px 18px;flex:1;min-width:140px;border-left:5px solid #2D6A4F;box-shadow:0 2px 6px rgba(0,0,0,0.07)}
+.kpi .val{font-size:26px;font-weight:900;line-height:1.1}
+.kpi .lbl{font-size:11px;color:#6b7280;margin-top:3px;font-weight:600}
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 2px 6px rgba(0,0,0,0.07)}
+.card h3{font-size:13px;font-weight:800;color:#1A3C2E;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #F0DFA0}
+.filters{background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
+.filters label{font-size:11px;font-weight:700;color:#6b7280;display:block;margin-bottom:3px}
+.filters select,.filters input{border:1.5px solid #D1C9BB;border-radius:8px;padding:7px 10px;font-size:13px;background:#FAFAF8;outline:none;min-width:130px}
+.btn-cl{background:#FEE2E2;color:#B5342A;border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;font-weight:700}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead tr{background:#1A3C2E}
+thead th{padding:9px 11px;color:#fff;text-align:left;font-weight:700;white-space:nowrap;font-size:11px}
+tbody tr:nth-child(even){background:#F8F6F2}
+tbody tr:hover{background:#EEF7F2}
+tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
+.badge{display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700}
+.bg-verde{background:#D1FAE5;color:#065F46}
+.bg-rojo{background:#FEE2E2;color:#991B1B}
+.bg-azul{background:#DBEAFE;color:#1E40AF}
+.bg-trigo{background:#FEF3C7;color:#92400E}
+.bg-violeta{background:#EDE9FE;color:#5B21B6}
+.dot{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:4px;vertical-align:middle}
+.pos{color:#059669;font-weight:700}
+.neg{color:#DC2626;font-weight:700}
+.chart-wrap{position:relative;height:260px}
+.chart-wrap-sm{position:relative;height:200px}
+.labor-card{background:#F8F6F2;border-radius:10px;padding:12px;margin-bottom:10px;border-left:4px solid #2D6A4F}
+.labor-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;flex-wrap:wrap;gap:6px}
+.ins-table{width:100%;font-size:11px;margin-top:8px;border-collapse:collapse}
+.ins-table th{background:#2D6A4F;color:#fff;padding:5px 8px;font-weight:700;text-align:left}
+.ins-table th.r{text-align:right}
+.ins-table td{padding:5px 8px;border-bottom:1px solid #EDE9E1;background:#fff}
+.ins-table td.r{text-align:right}
+.toggle-btn{background:#1A3C2E;color:#C9A84C;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:700}
+.detail-panel{display:none;margin-top:8px}
+.tab-sub{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.tab-sub button{background:#EDE9E1;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:700;color:#1A3C2E}
+.tab-sub button.active{background:#1A3C2E;color:#C9A84C}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.toast{position:fixed;bottom:20px;right:20px;background:#1A3C2E;color:#fff;padding:10px 16px;border-radius:8px;font-size:12px;font-weight:700;z-index:999;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.2)}
+@media(max-width:640px){.grid2{grid-template-columns:1fr}.kpi{min-width:130px}.chart-wrap{height:200px}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div><h1>🌾 AgroGestión 26/27</h1></div>
+  <div class="header-right">
+    <div class="tc-badge" id="tc-display" onclick="fetchTC()" title="Clic para actualizar TC">⟳ TC</div>
+    <button onclick="loadFromSheets()" style="background:#C9A84C;color:#1A3C2E;border:none;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:900">⟳ Actualizar datos</button>
+    <button style="background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700" onclick="loadFromSheets()">⟳ Actualizar datos</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showPage('stock',this)">📦 Stock</button>
+  <button class="tab" onclick="showPage('compras',this)">🛒 Compras</button>
+  <button class="tab" onclick="showPage('retiros',this)">↔ Retiros</button>
+  <button class="tab" onclick="showPage('labores',this)">🚜 Labores</button>
+  <button class="tab" onclick="showPage('lotes',this)">🗺️ Lotes</button>
+  <button class="tab" onclick="showPage('aportes',this)">👥 Aportes</button>
+  <button class="tab" onclick="showPage('retiros_vs',this)">🔍 Retiros vs Aportes</button>
+</div>
+<div id="toast" class="toast"></div>
+
+<!-- STOCK -->
+<div id="page-stock" class="page active">
+  <div class="kpi-row" id="kpi-stock"></div>
+  <div class="filters">
+    <div><label>Insumo</label><input type="text" id="f-ins" placeholder="Buscar insumo..." oninput="renderStock()"></div>
+    <div><label>Productor</label><select id="f-prod" onchange="renderStock()"><option value="">Todos</option></select></div>
+    <div><label>Proveedor</label><select id="f-prov" onchange="renderStock()"><option value="">Todos</option></select></div>
+    <button class="btn-cl" onclick="clrF(['f-ins','f-prod','f-prov'],renderStock)">✕ Limpiar</button>
+  </div>
+  <div id="stock-charts-global" class="grid2">
+    <div class="card"><h3>Stock por Productor</h3><div class="chart-wrap"><canvas id="ch-prod-global"></canvas></div></div>
+    <div class="card"><h3>Top 10 insumos con stock</h3><div class="chart-wrap"><canvas id="ch-ins-global"></canvas></div></div>
+  </div>
+  <div id="stock-charts-filtered" style="display:none">
+    <div class="grid2">
+      <div class="card"><h3 id="ch-prov-title">Insumo por Proveedor</h3><div class="chart-wrap"><canvas id="ch-prov-fil"></canvas></div></div>
+      <div class="card"><h3 id="ch-prod-title">Insumo por Productor</h3><div class="chart-wrap"><canvas id="ch-prod-fil"></canvas></div></div>
+    </div>
+  </div>
+  <div class="card"><h3>Detalle de stock</h3><div style="overflow-x:auto"><table><thead><tr>
+    <th onclick="sortTable('tb-stock',0)" style="cursor:pointer">Insumo</th><th>Tipo</th><th onclick="sortTable('tb-stock',2)" style="cursor:pointer">Productor</th><th onclick="sortTable('tb-stock',3)" style="cursor:pointer">Proveedor</th><th>Unid.</th>
+    <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-stock',5,true)">Comprado</th><th style="text-align:right;cursor:pointer" onclick="sortTable('tb-stock',6,true)">Retirado</th><th style="text-align:right;cursor:pointer" onclick="sortTable('tb-stock',7,true)">Stock</th>
+  </tr></thead><tbody id="tb-stock"></tbody></table></div></div>
+</div>
+
+<!-- COMPRAS -->
+<div id="page-compras" class="page">
+  <div class="kpi-row" id="kpi-compras"></div>
+  <div class="filters">
+    <div><label>Insumo</label><input type="text" id="fc-ins" placeholder="Buscar..." oninput="renderCompras()"></div>
+    <div><label>Productor</label><select id="fc-prod" onchange="renderCompras()"><option value="">Todos</option></select></div>
+    <div><label>Proveedor</label><select id="fc-prov" onchange="renderCompras()"><option value="">Todos</option></select></div>
+    <button class="btn-cl" onclick="clrF(['fc-ins','fc-prod','fc-prov'],renderCompras)">✕</button>
+  </div>
+  <div class="card"><h3>Historial de compras</h3><div style="overflow-x:auto"><table><thead><tr>
+    <th>Fecha</th><th>Productor</th><th>Proveedor</th><th>Insumo</th>
+    <th style="text-align:right">Cantidad</th><th style="text-align:right">USD/u</th><th style="text-align:right">Total USD</th>
+  </tr></thead><tbody id="tb-compras"></tbody></table></div></div>
+</div>
+
+<!-- RETIROS -->
+<div id="page-retiros" class="page">
+  <div class="kpi-row" id="kpi-retiros"></div>
+  <div class="filters">
+    <div><label>Insumo</label><input type="text" id="fr-ins" placeholder="Buscar..." oninput="renderRetiros()"></div>
+    <div><label>Productor</label><select id="fr-prod" onchange="renderRetiros()"><option value="">Todos</option></select></div>
+    <div><label>Proveedor</label><select id="fr-prov" onchange="renderRetiros()"><option value="">Todos</option></select></div>
+    <button class="btn-cl" onclick="clrF(['fr-ins','fr-prod','fr-prov'],renderRetiros)">✕</button>
+  </div>
+  <div class="card"><h3>Historial de retiros</h3><div style="overflow-x:auto"><table><thead><tr>
+    <th>Fecha</th><th>Productor</th><th>Proveedor</th><th>Remito</th><th>Insumo</th>
+    <th style="text-align:right">Cantidad</th>
+  </tr></thead><tbody id="tb-retiros"></tbody></table></div></div>
+</div>
+
+<!-- LABORES -->
+<div id="page-labores" class="page">
+  <div class="kpi-row" id="kpi-labores"></div>
+  <div class="filters">
+    <div><label>Lote</label><select id="fl-lote" onchange="renderLabores()"><option value="">Todos</option></select></div>
+    <div><label>Tipo</label><select id="fl-tipo" onchange="renderLabores()"><option value="">Todos</option></select></div>
+    <div><label>Contratista</label><select id="fl-cont" onchange="renderLabores()"><option value="">Todos</option></select></div>
+    <button class="btn-cl" onclick="clrF(['fl-lote','fl-tipo','fl-cont'],renderLabores)">✕</button>
+  </div>
+  <div class="card"><h3>Costo por lote — M.O. + Insumos (USD/ha)</h3><div class="chart-wrap"><canvas id="ch-lab"></canvas></div></div>
+  <div class="card"><h3>Detalle de labores</h3><div id="div-labores"></div></div>
+</div>
+
+<!-- LOTES -->
+<div id="page-lotes" class="page">
+  <div class="kpi-row" id="kpi-lotes"></div>
+  <div class="tab-sub" id="conv-tabs"></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px" id="grid-lotes"></div>
+</div>
+
+<!-- APORTES -->
+<div id="page-aportes" class="page">
+  <div class="filters">
+    <div><label>Ver por</label><select id="fa-modo" onchange="renderAportes()"><option value="lote">Lote</option><option value="convenio">Convenio</option></select></div>
+    <div><label>Filtrar</label><select id="fa-filtro" onchange="renderAportes()"><option value="">Todos</option></select></div>
+    <button class="btn-cl" onclick="clrF(['fa-filtro'],renderAportes)">✕</button>
+  </div>
+  <div class="card"><h3>Aportes por insumo — Teórico vs Real</h3>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th onclick="sortTable('tb-aportes',0)" style="cursor:pointer">Lote / Convenio</th>
+      <th onclick="sortTable('tb-aportes',1)" style="cursor:pointer">Insumo</th>
+      <th>Prod. A</th><th style="text-align:right;cursor:pointer" onclick="sortTable('tb-aportes',3,true)">Teórico A</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-aportes',4,true)">Real A</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-aportes',5,true)">Dif A</th>
+      <th>Prod. B</th><th style="text-align:right;cursor:pointer" onclick="sortTable('tb-aportes',7,true)">Teórico B</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-aportes',8,true)">Real B</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-aportes',9,true)">Dif B</th>
+    </tr></thead><tbody id="tb-aportes"></tbody></table></div>
+  </div>
+  <div class="card"><h3>Comparativo (top insumos)</h3><div class="chart-wrap"><canvas id="ch-aportes"></canvas></div></div>
+</div>
+
+<script>
+const SHEET_ID = "1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c";
+const PC = {"CACIORGNA HECTOR":"#1A3C2E","PELIZZA JAVIER":"#1A4D7C","SUCESION CACIORGNA RAUL":"#8B5E3C"};
+const fmt = (n,d=1)=>(n||0).toLocaleString("es-AR",{minimumFractionDigits:0,maximumFractionDigits:d});
+const fmtU = n=>"USD "+fmt(n,0);
+const fmtP = n=>"$"+fmt(n,0);
+let TC = 1488;
+
+let DATA = {"lotes": [{"nombre": "PICAPIETRA", "ha": 72, "convenio": "CAC-PEL", "prod1": "CACIORGNA HECTOR", "ha_p1": 36, "pct1": 50.0, "prod2": "PELIZZA JAVIER", "ha_p2": 36, "pct2": 50.0}, {"nombre": "ARBOLITO", "ha": 70, "convenio": "CAC-PEL", "prod1": "CACIORGNA HECTOR", "ha_p1": 35, "pct1": 50.0, "prod2": "PELIZZA JAVIER", "ha_p2": 35, "pct2": 50.0}, {"nombre": "RAFAEL OBLIGADO", "ha": 145, "convenio": "CAC-PEL", "prod1": "CACIORGNA HECTOR", "ha_p1": 72.5, "pct1": 50.0, "prod2": "PELIZZA JAVIER", "ha_p2": 72.5, "pct2": 50.0}, {"nombre": "BRETES", "ha": 42, "convenio": "HECT-SUC", "prod1": "CACIORGNA HECTOR", "ha_p1": 26, "pct1": 61.9, "prod2": "SUCESION CACIORGNA RAUL", "ha_p2": 16, "pct2": 38.1}, {"nombre": "FICARDI BAJO", "ha": 40, "convenio": "HECT-SUC", "prod1": "CACIORGNA HECTOR", "ha_p1": 15, "pct1": 37.5, "prod2": "SUCESION CACIORGNA RAUL", "ha_p2": 25, "pct2": 62.5}, {"nombre": "BALIEN", "ha": 12, "convenio": "HECT-SUC", "prod1": "CACIORGNA HECTOR", "ha_p1": 10, "pct1": 83.3, "prod2": "SUCESION CACIORGNA RAUL", "ha_p2": 2, "pct2": 16.7}, {"nombre": "FICARDI LOMA", "ha": 40, "convenio": "HECT-SUC", "prod1": "CACIORGNA HECTOR", "ha_p1": 15, "pct1": 37.5, "prod2": "SUCESION CACIORGNA RAUL", "ha_p2": 25, "pct2": 62.5}, {"nombre": "OMBU", "ha": 4, "convenio": "SUCESION", "prod1": "CACIORGNA HECTOR", "ha_p1": 0, "pct1": 0.0, "prod2": "SUCESION CACIORGNA RAUL", "ha_p2": 4, "pct2": 100.0}, {"nombre": "CHACRA DERECHA", "ha": 30, "convenio": "HECT-SUC", "prod1": "CACIORGNA HECTOR", "ha_p1": 15, "pct1": 50.0, "prod2": "SUCESION CACIORGNA RAUL", "ha_p2": 15, "pct2": 50.0}, {"nombre": "PRIANO", "ha": 20, "convenio": "HECT-SUC", "prod1": "CACIORGNA HECTOR", "ha_p1": 17, "pct1": 85.0, "prod2": "SUCESION CACIORGNA RAUL", "ha_p2": 3, "pct2": 15.0}, {"nombre": "CHACRA IZQUIERDA", "ha": 30, "convenio": "HECT-SUC", "prod1": "CACIORGNA HECTOR", "ha_p1": 15, "pct1": 50.0, "prod2": "SUCESION CACIORGNA RAUL", "ha_p2": 15, "pct2": 50.0}, {"nombre": "MANGRULLO", "ha": 14, "convenio": "SUCESION", "prod1": "CACIORGNA HECTOR", "ha_p1": 0, "pct1": 0.0, "prod2": "SUCESION CACIORGNA RAUL", "ha_p2": 14, "pct2": 100.0}, {"nombre": "PATRICIA", "ha": 33, "convenio": "HECTOR", "prod1": "CACIORGNA HECTOR", "ha_p1": 33, "pct1": 100.0, "prod2": "", "ha_p2": 0, "pct2": 0.0}, {"nombre": "REBISSO", "ha": 30, "convenio": "HECTOR", "prod1": "CACIORGNA HECTOR", "ha_p1": 30, "pct1": 100.0, "prod2": "", "ha_p2": 0, "pct2": 0.0}, {"nombre": "NELIDA", "ha": 28, "convenio": "HECTOR", "prod1": "CACIORGNA HECTOR", "ha_p1": 28, "pct1": 100.0, "prod2": "", "ha_p2": 0, "pct2": 0.0}, {"nombre": "PARRA", "ha": 27, "convenio": "HECTOR", "prod1": "CACIORGNA HECTOR", "ha_p1": 27, "pct1": 100.0, "prod2": "", "ha_p2": 0, "pct2": 0.0}, {"nombre": "MAROTTA", "ha": 10, "convenio": "HECTOR", "prod1": "CACIORGNA HECTOR", "ha_p1": 10, "pct1": 100.0, "prod2": "", "ha_p2": 0, "pct2": 0.0}, {"nombre": "SIGNIFREDI", "ha": 36, "convenio": "HECTOR", "prod1": "CACIORGNA HECTOR", "ha_p1": 36, "pct1": 100.0, "prod2": "", "ha_p2": 0, "pct2": 0.0}, {"nombre": "SIGNIFREDI 15", "ha": 19, "convenio": "HECTOR", "prod1": "CACIORGNA HECTOR", "ha_p1": 19, "pct1": 100.0, "prod2": "", "ha_p2": 0, "pct2": 0.0}], "compras": [{"fecha": "2026-06-12", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "UREA", "cantidad": 4000.0, "precio": 0.755}, {"fecha": "2026-06-12", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "ARRANCADOR (MAIZ-TRIGO) 70 MAP-30 SPS", "cantidad": 3500.0, "precio": 0.842}, {"fecha": "2025-10-20", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "ADJEVA X KG (SAFLUFENACIL 70%)", "cantidad": 0.7, "precio": 330.0}, {"fecha": "2025-10-07", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "ARPEGIO (TIAME + LAMBDA)", "cantidad": 15.0, "precio": 19.91}, {"fecha": "2025-10-22", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "TEMPUS MAX", "cantidad": 30.0, "precio": 20.46}, {"fecha": "2026-05-23", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "FLUMIOXAZIN 48%", "cantidad": 20.0, "precio": 23.54}, {"fecha": "2025-10-22", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "SULFENTRAZONE", "cantidad": 95.0, "precio": 21.78}, {"fecha": "2025-10-08", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "PICLORAM 24%", "cantidad": 10.0, "precio": 7.59}, {"fecha": "2025-06-10", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "DICAMBA 48%", "cantidad": 5.0, "precio": 6.55}, {"fecha": "2026-06-13", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "GLIFOSATO AURUM II 48%", "cantidad": 1000.0, "precio": 5.28}, {"fecha": "2026-05-23", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "GLIFOSATO AURUM 48%", "cantidad": 100.0, "precio": 5.94}, {"fecha": "2024-09-28", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "S-METOLACLOR (MARGEN -PRO)", "cantidad": 20.0, "precio": 7.59}, {"fecha": "2025-07-02", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "GLIFOSATO AURUM II 48%", "cantidad": 120.0, "precio": 5.28}, {"fecha": "2025-06-10", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "SHARK (CARFENTRAZONE 40%)", "cantidad": 3.0, "precio": 121.0}, {"fecha": "2024-09-28", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "SPECTOR (LAMBDACIALOTRINA 25%)", "cantidad": 1.0, "precio": 20.46}, {"fecha": "2024-09-28", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "DINAMIC 70 WG (AMICARBAZONE)", "cantidad": 5.0, "precio": 34.1}, {"fecha": "2022-09-30", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "CURASEMILLA BRADYNOC PACK (2)", "cantidad": 2.0, "precio": 102.3}, {"fecha": "2026-06-13", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "METSULFURON", "cantidad": 1.0, "precio": 29.7}, {"fecha": "2026-06-13", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "CLETODIM 24%", "cantidad": 40.0, "precio": 8.58}, {"fecha": "2026-06-13", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "PRODINECO", "cantidad": 4.0, "precio": 25.3}, {"fecha": "2026-05-23", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "SULFATO DE AMONIO", "cantidad": 20.0, "precio": 1.65}, {"fecha": "2026-05-23", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "2,4 D HERBIFEN ADVANCE", "cantidad": 40.0, "precio": 6.05}, {"fecha": "2026-05-23", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "", "insumo": "PRODINOLEO MAXIMO", "cantidad": 5.0, "precio": 17.05}, {"fecha": "", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGD", "remito": "", "insumo": "2,4 D HERBIFEN ADVANCE", "cantidad": 300.0, "precio": 0}, {"fecha": "", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGD", "remito": "", "insumo": "ATRAZINA 90%", "cantidad": 100.0, "precio": 0}, {"fecha": "2025-08-26", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "remito": "", "insumo": "MUSTANG (ZETAMETRINA 20%)", "cantidad": 5.0, "precio": 22.0}, {"fecha": "", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "DS AGRO", "remito": "", "insumo": "SEM. MAIZ NS7765 VIPTERA3", "cantidad": 13.0, "precio": 173.44}, {"fecha": "", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "DS AGRO", "remito": "", "insumo": "SEM. MAIZ NS7624 VIPTERA3 CL", "cantidad": 7.0, "precio": 159.57}, {"fecha": "", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "DS AGRO", "remito": "", "insumo": "SEM. MAIZ NS7800 TGCL C2", "cantidad": 1.0, "precio": 112.04}, {"fecha": "2026-06-12", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "", "insumo": "ARRANCADOR (MAIZ-TRIGO) 70 MAP-30 SPS", "cantidad": 7000.0, "precio": 0.842}, {"fecha": "2025-10-07", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "", "insumo": "ACEITE DASH MSO", "cantidad": 140.0, "precio": 15.95}, {"fecha": "2025-10-07", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "", "insumo": "ARPEGIO (TIAME + LAMBDA)", "cantidad": 20.0, "precio": 19.91}, {"fecha": "2026-05-23", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "", "insumo": "FLUMIOXAZIN 48%", "cantidad": 5.0, "precio": 23.54}, {"fecha": "2023-08-09", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "", "insumo": "SULFENTRAZONE", "cantidad": 80.0, "precio": 21.78}, {"fecha": "2025-01-20", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "", "insumo": "CLETODIM 24%", "cantidad": 360.0, "precio": 7.92}, {"fecha": "2025-11-12", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "", "insumo": "ATRAZINA 90%", "cantidad": 100.0, "precio": 6.49}, {"fecha": "2026-05-23", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "", "insumo": "ARRANCADOR (SOJA) 70 SPT-30 SPS", "cantidad": 5240.0, "precio": 0.751}, {"fecha": "2026-06-13", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "", "insumo": "METSULFURON", "cantidad": 1.0, "precio": 29.7}, {"fecha": "2026-06-13", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "", "insumo": "PRODINECO", "cantidad": 7.0, "precio": 25.3}, {"fecha": "2026-05-23", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "", "insumo": "SULFATO DE AMONIO", "cantidad": 20.0, "precio": 1.65}, {"fecha": "2026-05-23", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "", "insumo": "FINESSE", "cantidad": 0.75, "precio": 275.0}, {"fecha": "2026-05-23", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "", "insumo": "PRODINOLEO MAXIMO", "cantidad": 5.0, "precio": 17.05}, {"fecha": "2025-08-26", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "", "insumo": "MUSTANG (ZETAMETRINA 20%)", "cantidad": 5.0, "precio": 22.0}, {"fecha": "", "productor": "CACIORGNA HECTOR", "proveedor": "DS AGRO", "remito": "", "insumo": "SEM. MAIZ NS7765 VIPTERA3", "cantidad": 15.0, "precio": 173.44}, {"fecha": "", "productor": "CACIORGNA HECTOR", "proveedor": "DS AGRO", "remito": "", "insumo": "SEM. MAIZ NS7624 VIPTERA3 CL", "cantidad": 7.0, "precio": 159.57}, {"fecha": "", "productor": "CACIORGNA HECTOR", "proveedor": "DS AGRO", "remito": "", "insumo": "SEM. MAIZ NS7800 TGCL C2", "cantidad": 3.0, "precio": 112.04}, {"fecha": "", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "", "insumo": "SEM. MAIZ BASF 5575 VT3P B1", "cantidad": 27.0, "precio": 193.0}, {"fecha": "", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "", "insumo": "SEM. MAIZ BASF 2300 RR2", "cantidad": 3.0, "precio": 193.0}, {"fecha": "2025-07-25", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "", "insumo": "GLIFOSATO GRANULADO SIGMA 68,8%", "cantidad": 90.0, "precio": 4.9}, {"fecha": "2025-08-26", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "", "insumo": "DINAMIC 70 WG (AMICARBAZONE)", "cantidad": 55.0, "precio": 27.0}, {"fecha": "2025-08-26", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "", "insumo": "DUAL GOLD (s-metolacloro)", "cantidad": 100.0, "precio": 6.8}, {"fecha": "2025-08-26", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "", "insumo": "MUSTANG (Zetametrina 20%)", "cantidad": 10.0, "precio": 22.0}, {"fecha": "2026-03-25", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "", "insumo": "2,4 D HERBIFEN ADVANCE", "cantidad": 200.0, "precio": 5.0}, {"fecha": "2026-03-25", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "", "insumo": "2,4 D LV89 SIGMA", "cantidad": 500.0, "precio": 4.3}, {"fecha": "2026-03-25", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "", "insumo": "GLIFOSATO SIGMA FULL II 54%", "cantidad": 280.0, "precio": 3.9}, {"fecha": "2026-03-25", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "", "insumo": "GLIFOSATO GRANULADO SIGMA 68,8%", "cantidad": 510.0, "precio": 5.4}, {"fecha": "2026-03-25", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "", "insumo": "SELECT ULP (CLETODIM 24%)", "cantidad": 1000.0, "precio": 6.8}, {"fecha": "2025-07-25", "productor": "CACIORGNA HECTOR", "proveedor": "DEL BASSO", "remito": "", "insumo": "GLIFOSATO GRANULADO 72%", "cantidad": 1000.0, "precio": 5.5}, {"fecha": "2026-06-26", "productor": "CACIORGNA HECTOR", "proveedor": "CARGILL", "remito": "", "insumo": "MAP", "cantidad": 3160.0, "precio": 1.015}, {"fecha": "2026-06-26", "productor": "CACIORGNA HECTOR", "proveedor": "CARGILL", "remito": "", "insumo": "UREA", "cantidad": 21910.0, "precio": 0.84}, {"fecha": "2026-06-19", "productor": "CACIORGNA HECTOR", "proveedor": "CARGILL", "remito": "", "insumo": "2,4 D EMPIRIC (SAL COLINA)", "cantidad": 300.0, "precio": 5.35}, {"fecha": "2026-06-19", "productor": "CACIORGNA HECTOR", "proveedor": "CARGILL", "remito": "", "insumo": "GLUFOSINATO DE AMONIO 28%", "cantidad": 300.0, "precio": 4.59}, {"fecha": "2026-06-19", "productor": "CACIORGNA HECTOR", "proveedor": "CARGILL", "remito": "", "insumo": "GLIFOSATO GRANULADO CARGILL 79,2%", "cantidad": 300.0, "precio": 6.68}, {"fecha": "2026-06-19", "productor": "CACIORGNA HECTOR", "proveedor": "CARGILL", "remito": "", "insumo": "S-METALOCLOR", "cantidad": 200.0, "precio": 6.66}, {"fecha": "2026-06-19", "productor": "CACIORGNA HECTOR", "proveedor": "CARGILL", "remito": "", "insumo": "SULFENTRAZONE", "cantidad": 100.0, "precio": 18.45}, {"fecha": "", "productor": "CACIORGNA HECTOR", "proveedor": "AGD", "remito": "", "insumo": "ATRAZINA 90%", "cantidad": 100.0, "precio": 0}, {"fecha": "", "productor": "CACIORGNA HECTOR", "proveedor": "AGD", "remito": "", "insumo": "2,4 D HERBIFEN ADVANCE", "cantidad": 500.0, "precio": 0}, {"fecha": "", "productor": "CACIORGNA HECTOR", "proveedor": "AGD", "remito": "", "insumo": "UREA", "cantidad": 1460.0, "precio": 0}, {"fecha": "", "productor": "CACIORGNA HECTOR", "proveedor": "AGD", "remito": "", "insumo": "MAP", "cantidad": 5780.0, "precio": 0}, {"fecha": "2026-05-26", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00082459", "insumo": "FULLTEC MAX", "cantidad": 7.0, "precio": 28.0}, {"fecha": "2026-06-03", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00082915", "insumo": "TRIFLURALINA 60%", "cantidad": 43.0, "precio": 22.5}, {"fecha": "2026-06-08", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00083065", "insumo": "RIZO SPRAY EXTREMO", "cantidad": 20.0, "precio": 17.5}, {"fecha": "2026-06-08", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00083065", "insumo": "KIT SISTIVA", "cantidad": 1.0, "precio": 320.0}, {"fecha": "2026-06-09", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00083104", "insumo": "SEM. CAMELINA SO50", "cantidad": 375.0, "precio": 1.5}, {"fecha": "2026-06-09", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00083104", "insumo": "SEM. CAMELINA PINA", "cantidad": 12.5, "precio": 1.5}, {"fecha": "2026-06-15", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00083287", "insumo": "FULLTEC MAX", "cantidad": 3.0, "precio": 28.0}, {"fecha": "2026-05-26", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "remito": "R-0005-00082460", "insumo": "FULLTEC MAX", "cantidad": 2.0, "precio": 28.0}, {"fecha": "2026-06-03", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "remito": "R-0005-00082916", "insumo": "TRIFLURALINA 60%", "cantidad": 17.0, "precio": 22.5}, {"fecha": "2026-06-05", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "remito": "R-0005-00083022", "insumo": "SHARK (CARFENTRAZONE 40%)", "cantidad": 1.0, "precio": 105.0}, {"fecha": "2026-06-05", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "remito": "R-0005-00083022", "insumo": "SEM. CAMELINA SO50", "cantidad": 175.0, "precio": 1.5}, {"fecha": "2026-06-05", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "remito": "R-0005-00083022", "insumo": "SULFATO DE AMONIO", "cantidad": 20.0, "precio": 1.45}, {"fecha": "2026-06-15", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "remito": "R-0005-00083288", "insumo": "FULLTEC MAX", "cantidad": 4.0, "precio": 28.0}], "retiros": [{"fecha": "2026-05-23", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "N°00005-00071870", "insumo": "GLIFOSATO AURUM II 48%", "cantidad": 60.0}, {"fecha": "2026-05-23", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "N°00005-00071870", "insumo": "2,4 D HERBIFEN ADVANCE", "cantidad": 40.0}, {"fecha": "2026-05-23", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "N°00005-00071870", "insumo": "SULFATO DE AMONIO", "cantidad": 20.0}, {"fecha": "2026-05-23", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "N°00005-00071870", "insumo": "FLUMIOXAZIN 48%", "cantidad": 5.0}, {"fecha": "2026-05-23", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "N°00005-00071870", "insumo": "PRODINOLEO MAXIMO", "cantidad": 5.0}, {"fecha": "2026-05-26", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "N°00005-00071882", "insumo": "METSULFURON", "cantidad": 0.5}, {"fecha": "2026-06-13", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "N°00005-00071984", "insumo": "GLIFOSATO AURUM II 48%", "cantidad": 200.0}, {"fecha": "2026-06-13", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "N°00005-00071984", "insumo": "CLETODIM 24%", "cantidad": 40.0}, {"fecha": "2026-06-13", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "N°00005-00071984", "insumo": "METSULFURON", "cantidad": 0.5}, {"fecha": "2026-06-13", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "N°00005-00071984", "insumo": "PRODINECO", "cantidad": 3.0}, {"fecha": "2026-05-26", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "remito": "R-0005-00082460", "insumo": "FULLTEC MAX", "cantidad": 2.0}, {"fecha": "2026-06-03", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "remito": "R-0005-00082916", "insumo": "TRIFLURALINA 60%", "cantidad": 17.0}, {"fecha": "2026-06-15", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "remito": "R-0005-00083288", "insumo": "FULLTEC MAX", "cantidad": 4.0}, {"fecha": "2026-06-05", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "N°00005-00071941", "insumo": "UREA", "cantidad": 1440.0}, {"fecha": "2026-06-05", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "N°00028-00009806", "insumo": "ARRANCADOR (MAIZ-TRIGO) 70 MAP-30 SPS", "cantidad": 900.0}, {"fecha": "2026-06-05", "productor": "CACIORGNA HECTOR", "proveedor": "CARGILL", "remito": "R-53250-0003918", "insumo": "UREA", "cantidad": 2900.0}, {"fecha": "2026-06-08", "productor": "CACIORGNA HECTOR", "proveedor": "CARGILL", "remito": "R-53250-0003932", "insumo": "UREA", "cantidad": 2170.0}, {"fecha": "2026-06-13", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "N°00005-00071985", "insumo": "METSULFURON", "cantidad": 0.5}, {"fecha": "2026-06-13", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "N°00005-00071985", "insumo": "PRODINECO", "cantidad": 7.0}, {"fecha": "2026-05-26", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "N°00005-00071881", "insumo": "METSULFURON", "cantidad": 0.25}, {"fecha": "2026-05-23", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "N°00005-00071869", "insumo": "FLUMIOXAZIN 48%", "cantidad": 5.0}, {"fecha": "2026-05-23", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "N°00005-00071869", "insumo": "SULFATO DE AMONIO", "cantidad": 20.0}, {"fecha": "2026-05-23", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "N°00005-00071869", "insumo": "METSULFURON", "cantidad": 0.25}, {"fecha": "2026-05-23", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "N°00005-00071869", "insumo": "FINESSE", "cantidad": 0.75}, {"fecha": "2026-05-23", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "N°00005-00071869", "insumo": "PRODINOLEO MAXIMO", "cantidad": 5.0}, {"fecha": "2026-05-26", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00082459", "insumo": "FULLTEC MAX", "cantidad": 7.0}, {"fecha": "2026-05-26", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00082433", "insumo": "SELECT ULP (CLETODIM 24%)", "cantidad": 30.0}, {"fecha": "2026-06-03", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00082915", "insumo": "TRIFLURALINA 60%", "cantidad": 43.0}, {"fecha": "2026-06-05", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00083023", "insumo": "GLIFOSATO SIGMA FULL II 54%", "cantidad": 40.0}, {"fecha": "2026-06-08", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00083066", "insumo": "GLIFOSATO GRANULADO SIGMA 68,8%", "cantidad": 90.0}, {"fecha": "2026-06-08", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00083065", "insumo": "RIZO SPRAY EXTREMO", "cantidad": 20.0}, {"fecha": "2026-06-08", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00083065", "insumo": "KIT SISTIVA", "cantidad": 1.0}, {"fecha": "2026-06-09", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00083104", "insumo": "SEM. CAMELINA SO50", "cantidad": 375.0}, {"fecha": "2026-06-09", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00083104", "insumo": "SEM. CAMELINA PINA", "cantidad": 12.5}, {"fecha": "2026-06-15", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00083286", "insumo": "GLIFOSATO SIGMA FULL II 54%", "cantidad": 140.0}, {"fecha": "2026-06-15", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00083286", "insumo": "SELECT ULP (CLETODIM 24%)", "cantidad": 40.0}, {"fecha": "2026-06-15", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00083287", "insumo": "FULLTEC MAX", "cantidad": 3.0}, {"fecha": "2026-06-16", "productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "remito": "R-0005-00083329", "insumo": "GLIFOSATO SIGMA FULL II 54%", "cantidad": 140.0}, {"fecha": "2026-06-05", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "remito": "R-0005-00083022", "insumo": "SHARK (CARFENTRAZONE 40%)", "cantidad": 1.0}, {"fecha": "2026-06-05", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "remito": "R-0005-00083022", "insumo": "SEM. CAMELINA SO50", "cantidad": 175.0}, {"fecha": "2026-06-05", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "remito": "R-0005-00083022", "insumo": "SULFATO DE AMONIO", "cantidad": 20.0}, {"fecha": "2026-06-08", "productor": "CACIORGNA HECTOR", "proveedor": "DEL BASSO", "remito": "1", "insumo": "GLIFOSATO GRANULADO 72%", "cantidad": 120.0}, {"fecha": "2026-05-23", "productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "remito": "N°00005-00071717", "insumo": "PRODINECO", "cantidad": 1.0}, {"fecha": "", "productor": "CACIORGNA HECTOR", "proveedor": "GEA", "remito": "", "insumo": "ARRANCADOR (MAIZ-TRIGO) 70 MAP-30 SPS", "cantidad": 2100.0}], "stock": [{"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "UREA", "tipo": "FERTILIZANTE", "unidad": "KG", "comprado": 4000.0, "retirado": 1440.0, "stock": 2560.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "ARRANCADOR (MAIZ-TRIGO) 70 MAP-30 SPS", "tipo": "FERTILIZANTE", "unidad": "KG", "comprado": 3500.0, "retirado": 900.0, "stock": 2600.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "ADJEVA X KG (SAFLUFENACIL 70%)", "tipo": "HERBICIDA", "unidad": "KG", "comprado": 0.7, "retirado": 0, "stock": 0.7}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "ARPEGIO (TIAME + LAMBDA)", "tipo": "INSECTICIDA", "unidad": "LT", "comprado": 15.0, "retirado": 0, "stock": 15.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "TEMPUS MAX", "tipo": "FUNGICIDA", "unidad": "LT", "comprado": 30.0, "retirado": 0, "stock": 30.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "FLUMIOXAZIN 48%", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 20.0, "retirado": 5.0, "stock": 15.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "SULFENTRAZONE", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 95.0, "retirado": 0, "stock": 95.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "PICLORAM 24%", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 10.0, "retirado": 0, "stock": 10.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "DICAMBA 48%", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 5.0, "retirado": 0, "stock": 5.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "GLIFOSATO AURUM II 48%", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 1120.0, "retirado": 260.0, "stock": 860.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "GLIFOSATO AURUM 48%", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 100.0, "retirado": 0, "stock": 100.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "S-METOLACLOR (MARGEN -PRO)", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 20.0, "retirado": 0, "stock": 20.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "SHARK (CARFENTRAZONE 40%)", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 3.0, "retirado": 0, "stock": 3.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "SPECTOR (LAMBDACIALOTRINA 25%)", "tipo": "INSECTICIDA", "unidad": "LT", "comprado": 1.0, "retirado": 0, "stock": 1.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "DINAMIC 70 WG (AMICARBAZONE)", "tipo": "HERBICIDA", "unidad": "KG", "comprado": 5.0, "retirado": 0, "stock": 5.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "CURASEMILLA BRADYNOC PACK (2)", "tipo": "CURASEMILLA", "unidad": "Pack", "comprado": 2.0, "retirado": 0, "stock": 2.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "METSULFURON", "tipo": "HERBICIDA", "unidad": "KG", "comprado": 1.0, "retirado": 1.0, "stock": 0.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "CLETODIM 24%", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 40.0, "retirado": 40.0, "stock": 0.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "PRODINECO", "tipo": "COADYUVANTE", "unidad": "LT", "comprado": 4.0, "retirado": 4.0, "stock": 0.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "SULFATO DE AMONIO", "tipo": "COADYUVANTE", "unidad": "LT", "comprado": 20.0, "retirado": 20.0, "stock": 0.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "2,4 D HERBIFEN ADVANCE", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 40.0, "retirado": 40.0, "stock": 0.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "GEA", "insumo": "PRODINOLEO MAXIMO", "tipo": "COADYUVANTE", "unidad": "LT", "comprado": 5.0, "retirado": 5.0, "stock": 0.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGD", "insumo": "2,4 D HERBIFEN ADVANCE", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 300.0, "retirado": 0, "stock": 300.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGD", "insumo": "ATRAZINA 90%", "tipo": "HERBICIDA", "unidad": "KG", "comprado": 100.0, "retirado": 0, "stock": 100.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "insumo": "MUSTANG (ZETAMETRINA 20%)", "tipo": "INSECTICIDA", "unidad": "LT", "comprado": 5.0, "retirado": 0, "stock": 5.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "DS AGRO", "insumo": "SEM. MAIZ NS7765 VIPTERA3", "tipo": "SEMILLA", "unidad": "BLS", "comprado": 13.0, "retirado": 0, "stock": 13.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "DS AGRO", "insumo": "SEM. MAIZ NS7624 VIPTERA3 CL", "tipo": "SEMILLA", "unidad": "BLS", "comprado": 7.0, "retirado": 0, "stock": 7.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "DS AGRO", "insumo": "SEM. MAIZ NS7800 TGCL C2", "tipo": "SEMILLA", "unidad": "BLS", "comprado": 1.0, "retirado": 0, "stock": 1.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "GEA", "insumo": "ARRANCADOR (MAIZ-TRIGO) 70 MAP-30 SPS", "tipo": "FERTILIZANTE", "unidad": "KG", "comprado": 7000.0, "retirado": 2100.0, "stock": 4900.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "GEA", "insumo": "ACEITE DASH MSO", "tipo": "COADYUVANTE", "unidad": "LT", "comprado": 140.0, "retirado": 0, "stock": 140.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "GEA", "insumo": "ARPEGIO (TIAME + LAMBDA)", "tipo": "INSECTICIDA", "unidad": "LT", "comprado": 20.0, "retirado": 0, "stock": 20.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "GEA", "insumo": "FLUMIOXAZIN 48%", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 5.0, "retirado": 5.0, "stock": 0.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "GEA", "insumo": "SULFENTRAZONE", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 80.0, "retirado": 0, "stock": 80.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "GEA", "insumo": "CLETODIM 24%", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 360.0, "retirado": 0, "stock": 360.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "GEA", "insumo": "ATRAZINA 90%", "tipo": "HERBICIDA", "unidad": "KG", "comprado": 100.0, "retirado": 0, "stock": 100.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "GEA", "insumo": "ARRANCADOR (SOJA) 70 SPT-30 SPS", "tipo": "FERTILIZANTE", "unidad": "KG", "comprado": 5240.0, "retirado": 0, "stock": 5240.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "GEA", "insumo": "METSULFURON", "tipo": "HERBICIDA", "unidad": "KG", "comprado": 1.0, "retirado": 1.0, "stock": 0.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "GEA", "insumo": "PRODINECO", "tipo": "COADYUVANTE", "unidad": "LT", "comprado": 7.0, "retirado": 7.0, "stock": 0.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "GEA", "insumo": "SULFATO DE AMONIO", "tipo": "COADYUVANTE", "unidad": "LT", "comprado": 20.0, "retirado": 20.0, "stock": 0.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "GEA", "insumo": "FINESSE", "tipo": "HERBICIDA", "unidad": "KG", "comprado": 0.75, "retirado": 0.75, "stock": 0.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "GEA", "insumo": "PRODINOLEO MAXIMO", "tipo": "COADYUVANTE", "unidad": "LT", "comprado": 5.0, "retirado": 5.0, "stock": 0.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "MUSTANG (ZETAMETRINA 20%)", "tipo": "INSECTICIDA", "unidad": "LT", "comprado": 5.0, "retirado": 0, "stock": 5.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "DS AGRO", "insumo": "SEM. MAIZ NS7765 VIPTERA3", "tipo": "SEMILLA", "unidad": "BLS", "comprado": 15.0, "retirado": 0, "stock": 15.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "DS AGRO", "insumo": "SEM. MAIZ NS7624 VIPTERA3 CL", "tipo": "SEMILLA", "unidad": "BLS", "comprado": 7.0, "retirado": 0, "stock": 7.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "DS AGRO", "insumo": "SEM. MAIZ NS7800 TGCL C2", "tipo": "SEMILLA", "unidad": "BLS", "comprado": 3.0, "retirado": 0, "stock": 3.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "SEM. MAIZ BASF 5575 VT3P B1", "tipo": "SEMILLA", "unidad": "BLS", "comprado": 27.0, "retirado": 0, "stock": 27.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "SEM. MAIZ BASF 2300 RR2", "tipo": "SEMILLA", "unidad": "BLS", "comprado": 3.0, "retirado": 0, "stock": 3.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "GLIFOSATO GRANULADO SIGMA 68,8%", "tipo": "HERBICIDA", "unidad": "KG", "comprado": 600.0, "retirado": 90.0, "stock": 510.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "DINAMIC 70 WG (AMICARBAZONE)", "tipo": "HERBICIDA", "unidad": "KG", "comprado": 55.0, "retirado": 0, "stock": 55.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "DUAL GOLD (s-metolacloro)", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 100.0, "retirado": 0, "stock": 100.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "MUSTANG (Zetametrina 20%)", "tipo": "", "unidad": "", "comprado": 10.0, "retirado": 0, "stock": 10.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "2,4 D HERBIFEN ADVANCE", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 200.0, "retirado": 0, "stock": 200.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "2,4 D LV89 SIGMA", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 500.0, "retirado": 0, "stock": 500.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "GLIFOSATO SIGMA FULL II 54%", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 280.0, "retirado": 320.0, "stock": -40.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "SELECT ULP (CLETODIM 24%)", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 1000.0, "retirado": 70.0, "stock": 930.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "DEL BASSO", "insumo": "GLIFOSATO GRANULADO 72%", "tipo": "HERBICIDA", "unidad": "KG", "comprado": 1000.0, "retirado": 120.0, "stock": 880.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "CARGILL", "insumo": "MAP", "tipo": "FERTILIZANTE", "unidad": "KG", "comprado": 3160.0, "retirado": 0, "stock": 3160.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "CARGILL", "insumo": "UREA", "tipo": "FERTILIZANTE", "unidad": "KG", "comprado": 21910.0, "retirado": 5070.0, "stock": 16840.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "CARGILL", "insumo": "2,4 D EMPIRIC (SAL COLINA)", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 300.0, "retirado": 0, "stock": 300.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "CARGILL", "insumo": "GLUFOSINATO DE AMONIO 28%", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 300.0, "retirado": 0, "stock": 300.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "CARGILL", "insumo": "GLIFOSATO GRANULADO CARGILL 79,2%", "tipo": "HERBICIDA", "unidad": "KG", "comprado": 300.0, "retirado": 0, "stock": 300.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "CARGILL", "insumo": "S-METALOCLOR", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 200.0, "retirado": 0, "stock": 200.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "CARGILL", "insumo": "SULFENTRAZONE", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 100.0, "retirado": 0, "stock": 100.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGD", "insumo": "ATRAZINA 90%", "tipo": "HERBICIDA", "unidad": "KG", "comprado": 100.0, "retirado": 0, "stock": 100.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGD", "insumo": "2,4 D HERBIFEN ADVANCE", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 500.0, "retirado": 0, "stock": 500.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGD", "insumo": "UREA", "tipo": "FERTILIZANTE", "unidad": "KG", "comprado": 1460.0, "retirado": 0, "stock": 1460.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGD", "insumo": "MAP", "tipo": "FERTILIZANTE", "unidad": "KG", "comprado": 5780.0, "retirado": 0, "stock": 5780.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "FULLTEC MAX", "tipo": "COADYUVANTE", "unidad": "LT", "comprado": 10.0, "retirado": 10.0, "stock": 0.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "TRIFLURALINA 60%", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 43.0, "retirado": 43.0, "stock": 0.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "RIZO SPRAY EXTREMO", "tipo": "COADYUVANTE", "unidad": "LT", "comprado": 20.0, "retirado": 20.0, "stock": 0.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "KIT SISTIVA", "tipo": "CURASEMILLA", "unidad": "Pack", "comprado": 1.0, "retirado": 1.0, "stock": 0.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "SEM. CAMELINA SO50", "tipo": "SEMILLA", "unidad": "KG", "comprado": 375.0, "retirado": 375.0, "stock": 0.0}, {"productor": "CACIORGNA HECTOR", "proveedor": "AGRONASAJA", "insumo": "SEM. CAMELINA PINA", "tipo": "SEMILLA", "unidad": "KG", "comprado": 12.5, "retirado": 12.5, "stock": 0.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "insumo": "FULLTEC MAX", "tipo": "COADYUVANTE", "unidad": "LT", "comprado": 6.0, "retirado": 6.0, "stock": 0.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "insumo": "TRIFLURALINA 60%", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 17.0, "retirado": 17.0, "stock": 0.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "insumo": "SHARK (CARFENTRAZONE 40%)", "tipo": "HERBICIDA", "unidad": "LT", "comprado": 1.0, "retirado": 1.0, "stock": 0.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "insumo": "SEM. CAMELINA SO50", "tipo": "SEMILLA", "unidad": "KG", "comprado": 175.0, "retirado": 175.0, "stock": 0.0}, {"productor": "SUCESION CACIORGNA RAUL", "proveedor": "AGRONASAJA", "insumo": "SULFATO DE AMONIO", "tipo": "COADYUVANTE", "unidad": "LT", "comprado": 20.0, "retirado": 20.0, "stock": 0.0}], "labores": [{"fecha": "2026-06-15", "lote": "FICARDI BAJO", "cultivo": "SOJA 1°", "contratista": "MILLET JOAQUIN", "tc": 1500.0, "precio_mo_ha": 11000.0, "prod_a": "CACIORGNA HECTOR", "prod_b": "SUCESION CACIORGNA RAUL", "insumos": [{"nombre": "GLIFOSATO SIGMA FULL II 54%", "cantidad": 80.0, "cant_teo_a": 30.0, "cant_real_a": 80.0, "cant_teo_b": 50.0, "cant_real_b": 0}, {"nombre": "CLETODIM 24%", "cantidad": 44.0, "cant_teo_a": 16.5, "cant_real_a": 4.0, "cant_teo_b": 27.5, "cant_real_b": 40.0}, {"nombre": "DICAMBA 48%", "cantidad": 6.0, "cant_teo_a": 2.25, "cant_real_a": 6.0, "cant_teo_b": 3.75, "cant_real_b": 0}, {"nombre": "2,4 D HERBIFEN ADVANCE", "cantidad": 34.0, "cant_teo_a": 12.75, "cant_real_a": 34.0, "cant_teo_b": 21.25, "cant_real_b": 0}, {"nombre": "METSULFURON", "cantidad": 0.3, "cant_teo_a": 0.11249999999999999, "cant_real_a": 0.11, "cant_teo_b": 0.1875, "cant_real_b": 0.19}, {"nombre": "FULLTEC MAX", "cantidad": 2.4, "cant_teo_a": 0.8999999999999999, "cant_real_a": 0.9, "cant_teo_b": 1.5, "cant_real_b": 1.5}], "tipo": "FUMIGACION"}, {"fecha": "2026-06-15", "lote": "FICARDI LOMA", "cultivo": "MAIZ 1°", "contratista": "MILLET JOAQUIN", "tc": 1500.0, "precio_mo_ha": 11000.0, "prod_a": "CACIORGNA HECTOR", "prod_b": "SUCESION CACIORGNA RAUL", "insumos": [{"nombre": "GLIFOSATO AURUM II 48%", "cantidad": 80.0, "cant_teo_a": 30.0, "cant_real_a": 0, "cant_teo_b": 50.0, "cant_real_b": 80.0}, {"nombre": "DICAMBA 48%", "cantidad": 6.0, "cant_teo_a": 2.25, "cant_real_a": 6.0, "cant_teo_b": 3.75, "cant_real_b": 0}, {"nombre": "2,4 D HERBIFEN ADVANCE", "cantidad": 25.0, "cant_teo_a": 9.375, "cant_real_a": 25.0, "cant_teo_b": 15.625, "cant_real_b": 0}, {"nombre": "ATRAZINA 90%", "cantidad": 40.0, "cant_teo_a": 15.0, "cant_real_a": 40.0, "cant_teo_b": 25.0, "cant_real_b": 0}, {"nombre": "PRODINECO", "cantidad": 1.0, "cant_teo_a": 0.375, "cant_real_a": 0.38, "cant_teo_b": 0.625, "cant_real_b": 0.63}], "tipo": "FUMIGACION"}, {"fecha": "2026-06-15", "lote": "PATRICIA", "cultivo": "SOJA 1°", "contratista": "MILLET JOAQUIN", "tc": 1500.0, "precio_mo_ha": 11000.0, "prod_a": "CACIORGNA HECTOR", "prod_b": "", "insumos": [{"nombre": "GLIFOSATO SIGMA FULL II 54%", "cantidad": 60.0, "cant_teo_a": 60.0, "cant_real_a": 60.0, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "SELECT ULP (CLETODIM 24%)", "cantidad": 36.0, "cant_teo_a": 36.0, "cant_real_a": 36.0, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "DICAMBA 48%", "cantidad": 5.0, "cant_teo_a": 5.0, "cant_real_a": 5.0, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "2,4 D HERBIFEN ADVANCE", "cantidad": 26.0, "cant_teo_a": 26.0, "cant_real_a": 26.0, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "METSULFURON", "cantidad": 0.25, "cant_teo_a": 0.25, "cant_real_a": 0.25, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "FULLTEC MAX", "cantidad": 2.0, "cant_teo_a": 2.0, "cant_real_a": 2.0, "cant_teo_b": 0, "cant_real_b": 0}], "tipo": "FUMIGACION"}, {"fecha": "2026-06-10", "lote": "RAFAEL OBLIGADO", "cultivo": "MAIZ 1°", "contratista": "FERNANDEZ CARLOS", "tc": 1500.0, "precio_mo_ha": 11000.0, "prod_a": "CACIORGNA HECTOR", "prod_b": "PELIZZA JAVIER", "insumos": [{"nombre": "GLIFOSATO GRANULADO SIGMA 68,8%", "cantidad": 240.0, "cant_teo_a": 120.0, "cant_real_a": 60.0, "cant_teo_b": 120.0, "cant_real_b": 180.0}, {"nombre": "2,4 D HERBIFEN ADVANCE", "cantidad": 120.0, "cant_teo_a": 60.0, "cant_real_a": 60.0, "cant_teo_b": 60.0, "cant_real_b": 60.0}, {"nombre": "DICAMBA 48%", "cantidad": 20.0, "cant_teo_a": 10.0, "cant_real_a": 10.0, "cant_teo_b": 10.0, "cant_real_b": 10.0}, {"nombre": "PERCUTOR", "cantidad": 7.0, "cant_teo_a": 3.5, "cant_real_a": 0, "cant_teo_b": 3.5, "cant_real_b": 7.0}, {"nombre": "RIZO SPRAY EXTREMO", "cantidad": 30.0, "cant_teo_a": 15.0, "cant_real_a": 15.0, "cant_teo_b": 15.0, "cant_real_b": 15.0}], "tipo": "FUMIGACION"}, {"fecha": "2026-06-08", "lote": "ARBOLITO", "cultivo": "TRIGO", "contratista": "CACIORGNA HECTOR", "tc": 1500.0, "precio_mo_ha": 43500.0, "prod_a": "CACIORGNA HECTOR", "prod_b": "PELIZZA JAVIER", "insumos": [{"nombre": "UREA", "cantidad": 13780.0, "cant_teo_a": 6890.0, "cant_real_a": 2165.0, "cant_teo_b": 6890.0, "cant_real_b": 11615.0}, {"nombre": "MAP", "cantidad": 8620.0, "cant_teo_a": 4310.0, "cant_real_a": 0, "cant_teo_b": 4310.0, "cant_real_b": 8620.0}, {"nombre": "KIT SISTIVA", "cantidad": 2.0, "cant_teo_a": 1.0, "cant_real_a": 1.0, "cant_teo_b": 1.0, "cant_real_b": 1.0}, {"nombre": "SEM. TRIGO COLIHUE", "cantidad": 9000.0, "cant_teo_a": 4500.0, "cant_real_a": 0, "cant_teo_b": 4500.0, "cant_real_b": 9000.0}], "tipo": "FERTILIZACION / SIEMBRA"}, {"fecha": "2026-06-06", "lote": "SIGNIFREDI", "cultivo": "CAMELINA", "contratista": "CACIORGNA HECTOR", "tc": 1500.0, "precio_mo_ha": 43500.0, "prod_a": "CACIORGNA HECTOR", "prod_b": "", "insumos": [{"nombre": "UREA", "cantidad": 3120.0, "cant_teo_a": 3120.0, "cant_real_a": 3120.0, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "SEM. CAMELINA SO50", "cantidad": 375.0, "cant_teo_a": 375.0, "cant_real_a": 375.0, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "SEM. CAMELINA PINA", "cantidad": 12.5, "cant_teo_a": 12.5, "cant_real_a": 12.5, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "ARRANCADOR (MAIZ-TRIGO) 70 MAP-30 SPS", "cantidad": 2100.0, "cant_teo_a": 2100.0, "cant_real_a": 2100.0, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "TRIFLURALINA 60%", "cantidad": 43.0, "cant_teo_a": 43.0, "cant_real_a": 43.0, "cant_teo_b": 0, "cant_real_b": 0}], "tipo": "FERTILIZACION / FUMIGACION / SIEMBRA"}, {"fecha": "2026-06-06", "lote": "MANGRULLO", "cultivo": "CAMELINA", "contratista": "CACIORGNA HECTOR", "tc": 1500.0, "precio_mo_ha": 43500.0, "prod_a": "CACIORGNA HECTOR", "prod_b": "SUCESION CACIORGNA RAUL", "insumos": [{"nombre": "UREA", "cantidad": 1215.0, "cant_teo_a": 0, "cant_real_a": 0, "cant_teo_b": 1215.0, "cant_real_b": 1215.0}, {"nombre": "SEM. CAMELINA SO50", "cantidad": 150.0, "cant_teo_a": 0, "cant_real_a": 0, "cant_teo_b": 150.0, "cant_real_b": 150.0}, {"nombre": "ARRANCADOR (MAIZ-TRIGO) 70 MAP-30 SPS", "cantidad": 900.0, "cant_teo_a": 0, "cant_real_a": 0, "cant_teo_b": 900.0, "cant_real_b": 900.0}, {"nombre": "GLIFOSATO SIGMA FULL II 54%", "cantidad": 30.0, "cant_teo_a": 0, "cant_real_a": 0, "cant_teo_b": 30.0, "cant_real_b": 30.0}, {"nombre": "SHARK (CARFENTRAZONE 40%)", "cantidad": 1.0, "cant_teo_a": 0, "cant_real_a": 0, "cant_teo_b": 1.0, "cant_real_b": 1.0}, {"nombre": "TRIFLURALINA 60%", "cantidad": 17.0, "cant_teo_a": 0, "cant_real_a": 0, "cant_teo_b": 17.0, "cant_real_b": 17.0}, {"nombre": "SULFATO DE AMONIO", "cantidad": 20.0, "cant_teo_a": 0, "cant_real_a": 0, "cant_teo_b": 20.0, "cant_real_b": 20.0}, {"nombre": "ACEITE DASH MSO", "cantidad": 3.0, "cant_teo_a": 0, "cant_real_a": 0, "cant_teo_b": 3.0, "cant_real_b": 3.0}], "tipo": "FERTILIZACION / FUMIGACION / SIEMBRA"}, {"fecha": "2026-05-26", "lote": "CHACRA DERECHA", "cultivo": "TRIGO", "contratista": "MILLET JOAQUIN", "tc": 1500.0, "precio_mo_ha": 11000.0, "prod_a": "CACIORGNA HECTOR", "prod_b": "SUCESION CACIORGNA RAUL", "insumos": [{"nombre": "GLIFOSATO SIGMA FULL II 54%", "cantidad": 60.0, "cant_teo_a": 30.0, "cant_real_a": 60.0, "cant_teo_b": 30.0, "cant_real_b": 0}, {"nombre": "2,4 D HERBIFEN ADVANCE", "cantidad": 30.0, "cant_teo_a": 15.0, "cant_real_a": 30.0, "cant_teo_b": 15.0, "cant_real_b": 0}, {"nombre": "METSULFURON", "cantidad": 0.3, "cant_teo_a": 0.15, "cant_real_a": 0.15, "cant_teo_b": 0.15, "cant_real_b": 0.15}, {"nombre": "FULLTEC MAX", "cantidad": 1.7, "cant_teo_a": 0.85, "cant_real_a": 0.85, "cant_teo_b": 0.85, "cant_real_b": 0.85}], "tipo": "FUMIGACION"}, {"fecha": "2026-05-26", "lote": "PRIANO", "cultivo": "TRIGO", "contratista": "MILLET JOAQUIN", "tc": 1500.0, "precio_mo_ha": 11000.0, "prod_a": "CACIORGNA HECTOR", "prod_b": "SUCESION CACIORGNA RAUL", "insumos": [{"nombre": "GLIFOSATO SIGMA FULL II 54%", "cantidad": 40.0, "cant_teo_a": 34.0, "cant_real_a": 40.0, "cant_teo_b": 6.0, "cant_real_b": 0}, {"nombre": "2,4 D HERBIFEN ADVANCE", "cantidad": 30.0, "cant_teo_a": 25.5, "cant_real_a": 30.0, "cant_teo_b": 4.5, "cant_real_b": 0}, {"nombre": "SULFATO DE AMONIO", "cantidad": 30.0, "cant_teo_a": 25.5, "cant_real_a": 30.0, "cant_teo_b": 4.5, "cant_real_b": 0.15}, {"nombre": "METSULFURON", "cantidad": 0.2, "cant_teo_a": 0.17, "cant_real_a": 0.2, "cant_teo_b": 0.03, "cant_real_b": 0.85}, {"nombre": "FULLTEC MAX", "cantidad": 1.1, "cant_teo_a": 0.935, "cant_real_a": 1.1, "cant_teo_b": 0.165, "cant_real_b": 0.85}], "tipo": "FUMIGACION"}, {"fecha": "2026-05-26", "lote": "NELIDA", "cultivo": "TRIGO", "contratista": "MILLET JOAQUIN", "tc": 1500.0, "precio_mo_ha": 11000.0, "prod_a": "CACIORGNA HECTOR", "prod_b": "", "insumos": [{"nombre": "GLIFOSATO SIGMA FULL II 54%", "cantidad": 52.0, "cant_teo_a": 52.0, "cant_real_a": 52.0, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "2,4 D HERBIFEN ADVANCE", "cantidad": 23.0, "cant_teo_a": 23.0, "cant_real_a": 23.0, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "METSULFURON", "cantidad": 0.3, "cant_teo_a": 0.3, "cant_real_a": 0.3, "cant_teo_b": 0, "cant_real_b": 0.15}, {"nombre": "FULLTEC MAX", "cantidad": 1.6, "cant_teo_a": 1.6, "cant_real_a": 1.6, "cant_teo_b": 0, "cant_real_b": 0.85}], "tipo": "FUMIGACION"}, {"fecha": "2026-05-26", "lote": "PARRA", "cultivo": "TRIGO", "contratista": "MILLET JOAQUIN", "tc": 1500.0, "precio_mo_ha": 11000.0, "prod_a": "CACIORGNA HECTOR", "prod_b": "", "insumos": [{"nombre": "GLIFOSATO SIGMA FULL II 54%", "cantidad": 50.0, "cant_teo_a": 50.0, "cant_real_a": 50.0, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "2,4 D HERBIFEN ADVANCE", "cantidad": 27.0, "cant_teo_a": 27.0, "cant_real_a": 27.0, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "SELECT ULP (CLETODIM 24%)", "cantidad": 27.0, "cant_teo_a": 27.0, "cant_real_a": 27.0, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "FINESSE", "cantidad": 0.45, "cant_teo_a": 0.45, "cant_real_a": 0.45, "cant_teo_b": 0, "cant_real_b": 0.15}, {"nombre": "FULLTEC MAX", "cantidad": 1.5, "cant_teo_a": 1.5, "cant_real_a": 1.5, "cant_teo_b": 0, "cant_real_b": 0.85}], "tipo": "FUMIGACION"}, {"fecha": "2026-05-26", "lote": "SIGNIFREDI 15", "cultivo": "TRIGO", "contratista": "MILLET JOAQUIN", "tc": 1500.0, "precio_mo_ha": 11000.0, "prod_a": "CACIORGNA HECTOR", "prod_b": "", "insumos": [{"nombre": "GLIFOSATO SIGMA FULL II 54%", "cantidad": 38.0, "cant_teo_a": 38.0, "cant_real_a": 38.0, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "2,4 D HERBIFEN ADVANCE", "cantidad": 19.0, "cant_teo_a": 19.0, "cant_real_a": 19.0, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "FINESSE", "cantidad": 0.3, "cant_teo_a": 0.3, "cant_real_a": 0.3, "cant_teo_b": 0, "cant_real_b": 0.15}, {"nombre": "FULLTEC MAX", "cantidad": 1.1, "cant_teo_a": 1.1, "cant_real_a": 1.1, "cant_teo_b": 0, "cant_real_b": 0.85}], "tipo": "FUMIGACION"}, {"fecha": "2026-05-25", "lote": "ARBOLITO", "cultivo": "TRIGO", "contratista": "FERNANDEZ CARLOS", "tc": 1500.0, "precio_mo_ha": 11000.0, "prod_a": "CACIORGNA HECTOR", "prod_b": "PELIZZA JAVIER", "insumos": [{"nombre": "GLIFOSATO GRANULADO 72%", "cantidad": 120.0, "cant_teo_a": 60.0, "cant_real_a": 120.0, "cant_teo_b": 60.0, "cant_real_b": 0}, {"nombre": "DICAMBA 48%", "cantidad": 10.0, "cant_teo_a": 5.0, "cant_real_a": 5.0, "cant_teo_b": 5.0, "cant_real_b": 5.0}, {"nombre": "2,4 D HERBIFEN ADVANCE", "cantidad": 60.0, "cant_teo_a": 30.0, "cant_real_a": 30.0, "cant_teo_b": 30.0, "cant_real_b": 30.0}, {"nombre": "METSULFURON", "cantidad": 0.7, "cant_teo_a": 0.35, "cant_real_a": 0, "cant_teo_b": 0.35, "cant_real_b": 0.7}, {"nombre": "RIZO SPRAY EXTREMO", "cantidad": 10.0, "cant_teo_a": 5.0, "cant_real_a": 5.0, "cant_teo_b": 5.0, "cant_real_b": 5.0}], "tipo": "FUMIGACION"}, {"fecha": "2026-05-25", "lote": "SIGNIFREDI", "cultivo": "CAMELINA", "contratista": "MILLET JOAQUIN", "tc": 1500.0, "precio_mo_ha": 11000.0, "prod_a": "CACIORGNA HECTOR", "prod_b": "", "insumos": [{"nombre": "GLIFOSATO SIGMA FULL II 54%", "cantidad": 60.0, "cant_teo_a": 60.0, "cant_real_a": 60.0, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "2,4 D HERBIFEN ADVANCE", "cantidad": 30.0, "cant_teo_a": 30.0, "cant_real_a": 30.0, "cant_teo_b": 0, "cant_real_b": 0}, {"nombre": "FULLTEC MAX", "cantidad": 2.0, "cant_teo_a": 2.0, "cant_real_a": 2.0, "cant_teo_b": 0, "cant_real_b": 0}], "tipo": "FUMIGACION"}], "convenios": {"CAC-PEL": ["PICAPIETRA", "ARBOLITO", "RAFAEL OBLIGADO"], "HECT-SUC": ["BRETES", "FICARDI BAJO", "BALIEN", "FICARDI LOMA", "CHACRA DERECHA", "PRIANO", "CHACRA IZQUIERDA"], "SUCESION": ["OMBU", "MANGRULLO"], "HECTOR": ["PATRICIA", "REBISSO", "NELIDA", "PARRA", "MAROTTA", "SIGNIFREDI", "SIGNIFREDI 15"]}};
+
+// ── TC automático via Argentina Datos ────────────────────────────────────────
+async function fetchTC() {
+  const el = document.getElementById("tc-display");
+  el.textContent = "⟳ Actualizando...";
+  try {
+    const r = await fetch("https://dolarapi.com/v1/dolares/oficial");
+    const d = await r.json();
+    if (d && d.venta) {
+      TC = d.venta;
+      el.textContent = `TC BNA: ${fmt(TC,0)} (venta) ✓`;
+      showToast(`✓ TC actualizado: $${fmt(TC,0)}`);
+    } else throw new Error();
+  } catch {
+    try {
+      const r2 = await fetch("https://api.bluelytics.com.ar/v2/latest");
+      const d2 = await r2.json();
+      TC = d2?.oficial?.value_sell || TC;
+      el.textContent = `TC BNA: ${fmt(TC,0)} (venta) ✓`;
+      showToast(`✓ TC BNA: $${fmt(TC,0)}`);
+    } catch {
+      el.textContent = `TC: ${fmt(TC,0)} (manual)`;
+      showToast("⚠ TC manual: $" + fmt(TC,0));
+    }
+  }
+}
+
+function showToast(m){const t=document.getElementById("toast");t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",2500);}
+let charts={};
+function dC(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+function ge(id){return document.getElementById(id);}
+function gV(id){return (ge( id)?.value||"");}
+function clrF(ids,fn){ids.forEach(id=>{const e=ge(id);if(e)e.value="";});fn();}
+function popSel(id,vals){
+  const s=ge(id);if(!s)return;const c=s.value;
+  s.innerHTML='<option value="">Todos</option>';
+  [...new Set(vals)].filter(Boolean).sort().forEach(v=>{
+    const o=document.createElement("option");o.value=v;o.textContent=v;s.appendChild(o);
+  });
+  s.value=c;
+}
+function showPage(id,btn){
+  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  ge("page-"+id).classList.add("active");
+  btn.classList.add("active");
+  const fns={stock:renderStock,compras:renderCompras,retiros:renderRetiros,labores:renderLabores,lotes:renderLotes,aportes:renderAportes,retiros_vs:renderRetirosVsAportes};
+  if(fns[id]) fns[id]();
+}
+
+
+// ── Sortable tables ───────────────────────────────────────────────────────────
+const sortState = {};
+function sortTable(tableId, colIdx, numeric=false){
+  const key = tableId+"|"+colIdx;
+  sortState[key] = sortState[key]==="asc" ? "desc" : "asc";
+  const asc = sortState[key]==="asc";
+  const tbody = ge(tableId);
+  const rows = Array.from(tbody.querySelectorAll("tr"));
+  rows.sort((a,b)=>{
+    const va = a.cells[colIdx]?.textContent.trim().replace(/[^0-9.,\-]/g,"")||"";
+    const vb = b.cells[colIdx]?.textContent.trim().replace(/[^0-9.,\-]/g,"")||"";
+    if(numeric){
+      const na=parseFloat(va.replace(",","."))||0, nb=parseFloat(vb.replace(",","."))||0;
+      return asc?na-nb:nb-na;
+    }
+    return asc?va.localeCompare(vb):vb.localeCompare(va);
+  });
+  rows.forEach(r=>tbody.appendChild(r));
+  // update header arrows
+  const table = tbody.closest("table");
+  table.querySelectorAll("th").forEach((th,i)=>{
+    th.textContent = th.textContent.replace(" ▲","").replace(" ▼","");
+    if(i===colIdx) th.textContent += asc?" ▲":" ▼";
+  });
+}
+// ── STOCK ─────────────────────────────────────────────────────────────────────
+function renderStock(){
+  const ins=gV("f-ins").toLowerCase(), prod=gV("f-prod"), prov=gV("f-prov");
+  popSel("f-prod",DATA.stock.map(s=>s.productor));
+  popSel("f-prov",DATA.stock.map(s=>s.proveedor));
+  const f=DATA.stock.filter(s=>
+    (!ins||s.insumo.toLowerCase().includes(ins))&&
+    (!prod||s.productor===prod)&&(!prov||s.proveedor===prov)
+  );
+  const tC=DATA.stock.reduce((a,s)=>a+s.comprado,0);
+  const tR=DATA.stock.reduce((a,s)=>a+s.retirado,0);
+  const con=[...new Set(DATA.stock.filter(s=>s.stock>0).map(s=>s.insumo))].length;
+
+  ge("kpi-stock").innerHTML=`
+    <div class="kpi" style="border-color:#2D6A4F"><div class="val">${con}</div><div class="lbl">Insumos con stock</div></div>
+    <div class="kpi" style="border-color:#1A4D7C"><div class="val">${fmt(tC,0)}</div><div class="lbl">Total comprado</div></div>
+    <div class="kpi" style="border-color:#8B5E3C"><div class="val">${fmt(tR,0)}</div><div class="lbl">Total retirado</div></div>
+    <div class="kpi" style="border-color:#C9A84C"><div class="val" style="color:#059669">${fmt(tC-tR,0)}</div><div class="lbl">Stock disponible</div></div>`;
+
+  const hayFiltroIns = ins.length > 0;
+
+  if (hayFiltroIns) {
+    // Mostrar gráficos específicos del insumo filtrado
+    ge("stock-charts-global").style.display = "none";
+    ge("stock-charts-filtered").style.display = "block";
+
+    const insNombre = f.length > 0 ? f[0].insumo : ins;
+    ge("ch-prov-title").textContent = `Stock por Proveedor`;
+    ge("ch-prod-title").textContent = `Stock por Productor`;
+
+    // Por proveedor
+    const byProv={};
+    f.forEach(s=>{byProv[s.proveedor]=(byProv[s.proveedor]||0)+s.stock;});
+    dC("ch-prov-fil");
+    charts["ch-prov-fil"]=new Chart(ge("ch-prov-fil"),{
+      type:"bar",
+      data:{labels:Object.keys(byProv),datasets:[{label:"Stock",data:Object.values(byProv),backgroundColor:"#1A4D7C",borderRadius:4}]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>" "+fmt(ctx.raw,1)}}},
+        scales:{y:{grid:{color:"#eee"},ticks:{callback:v=>fmt(v,0)}},x:{ticks:{font:{size:10}}}}
+      }
+    });
+
+    // Por productor
+    const byProd2={};
+    f.forEach(s=>{byProd2[s.productor]=(byProd2[s.productor]||0)+s.stock;});
+    dC("ch-prod-fil");
+    charts["ch-prod-fil"]=new Chart(ge("ch-prod-fil"),{
+      type:"doughnut",
+      data:{labels:Object.keys(byProd2),datasets:[{data:Object.values(byProd2),backgroundColor:Object.keys(byProd2).map(p=>PC[p]||"#ccc"),borderWidth:2,borderColor:"#fff"}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{font:{size:10}}}}}
+    });
+  } else {
+    ge("stock-charts-global").style.display = "grid";
+    ge("stock-charts-filtered").style.display = "none";
+
+    // Gráfico global por productor
+    const bp={};DATA.stock.forEach(s=>{bp[s.productor]=(bp[s.productor]||0)+s.stock;});
+    dC("ch-prod-global");
+    charts["ch-prod-global"]=new Chart(ge("ch-prod-global"),{
+      type:"doughnut",
+      data:{labels:Object.keys(bp),datasets:[{data:Object.values(bp),backgroundColor:Object.keys(bp).map(p=>PC[p]||"#ccc"),borderWidth:2,borderColor:"#fff"}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{font:{size:10}}}}}
+    });
+
+    // Top 10 insumos
+    const bi={};DATA.stock.filter(s=>s.stock>0).forEach(s=>{bi[s.insumo]=(bi[s.insumo]||0)+s.stock;});
+    const top=Object.entries(bi).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    dC("ch-ins-global");
+    charts["ch-ins-global"]=new Chart(ge("ch-ins-global"),{
+      type:"bar",
+      data:{labels:top.map(x=>x[0].substring(0,22)),datasets:[{label:"Stock",data:top.map(x=>x[1]),backgroundColor:"#52B788",borderRadius:3,
+        datalabels:{anchor:"end",align:"right",color:"#1A3C2E",font:{weight:"bold",size:10},formatter:v=>fmt(v,0)}
+      }]},
+      options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,
+        layout:{padding:{right:50}},
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>" "+fmt(ctx.raw,1)}}},
+        scales:{x:{grid:{color:"#eee"},ticks:{callback:v=>fmt(v,0)}},y:{ticks:{font:{size:9}}}}
+      }
+    });
+  }
+
+  ge("tb-stock").innerHTML=f.sort((a,b)=>b.stock-a.stock).map(s=>`<tr>
+    <td><strong>${s.insumo}</strong></td>
+    <td><span class="badge bg-trigo">${s.tipo||"—"}</span></td>
+    <td><span class="dot" style="background:${PC[s.productor]||"#ccc"}"></span>${s.productor}</td>
+    <td>${s.proveedor}</td><td style="color:#6b7280">${s.unidad}</td>
+    <td style="text-align:right">${fmt(s.comprado)}</td>
+    <td style="text-align:right;color:#B5342A">${fmt(s.retirado)}</td>
+    <td style="text-align:right;font-weight:800;color:${s.stock>0?"#059669":"#DC2626"}">${fmt(s.stock)}</td>
+  </tr>`).join("");
+}
+
+// ── COMPRAS ──────────────────────────────────────────────────────────────────
+function renderCompras(){
+  const ins=gV("fc-ins").toLowerCase(),prod=gV("fc-prod"),prov=gV("fc-prov");
+  popSel("fc-prod",DATA.compras.map(c=>c.productor));
+  popSel("fc-prov",DATA.compras.map(c=>c.proveedor));
+  const f=DATA.compras.filter(c=>(!ins||c.insumo.toLowerCase().includes(ins))&&(!prod||c.productor===prod)&&(!prov||c.proveedor===prov)).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  const tot=f.reduce((a,c)=>a+c.precio*c.cantidad,0);
+  ge("kpi-compras").innerHTML=`
+    <div class="kpi" style="border-color:#2D6A4F"><div class="val">${f.length}</div><div class="lbl">Registros</div></div>
+    <div class="kpi" style="border-color:#1A4D7C"><div class="val">USD ${fmt(tot,0)}</div><div class="lbl">Total invertido</div></div>
+    <div class="kpi" style="border-color:#C9A84C"><div class="val">${[...new Set(f.map(c=>c.insumo))].length}</div><div class="lbl">Insumos distintos</div></div>`;
+  ge("tb-compras").innerHTML=f.map(c=>`<tr>
+    <td>${c.fecha}</td>
+    <td><span class="dot" style="background:${PC[c.productor]||"#ccc"}"></span>${c.productor}</td>
+    <td>${c.proveedor}</td><td><strong>${c.insumo}</strong></td>
+    <td style="text-align:right">${fmt(c.cantidad)}</td>
+    <td style="text-align:right">${c.precio?fmt(c.precio,3):"—"}</td>
+    <td style="text-align:right;font-weight:700">${c.precio&&c.cantidad?"USD "+fmt(c.precio*c.cantidad,0):"—"}</td>
+  </tr>`).join("");
+}
+
+// ── RETIROS ──────────────────────────────────────────────────────────────────
+function renderRetiros(){
+  const ins=gV("fr-ins").toLowerCase(),prod=gV("fr-prod"),prov=gV("fr-prov");
+  popSel("fr-prod",DATA.retiros.map(r=>r.productor));
+  popSel("fr-prov",DATA.retiros.map(r=>r.proveedor));
+  const f=DATA.retiros.filter(r=>(!ins||r.insumo.toLowerCase().includes(ins))&&(!prod||r.productor===prod)&&(!prov||r.proveedor===prov)).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  ge("kpi-retiros").innerHTML=`
+    <div class="kpi" style="border-color:#8B5E3C"><div class="val">${f.length}</div><div class="lbl">Retiros</div></div>
+    <div class="kpi" style="border-color:#1A4D7C"><div class="val">${[...new Set(f.map(r=>r.insumo))].length}</div><div class="lbl">Insumos</div></div>
+    <div class="kpi" style="border-color:#2D6A4F"><div class="val">${[...new Set(f.map(r=>r.proveedor))].length}</div><div class="lbl">Proveedores</div></div>`;
+  ge("tb-retiros").innerHTML=f.map(r=>`<tr>
+    <td>${r.fecha}</td>
+    <td><span class="dot" style="background:${PC[r.productor]||"#ccc"}"></span>${r.productor}</td>
+    <td>${r.proveedor}</td><td style="font-size:10px;color:#6b7280">${r.remito||"—"}</td>
+    <td><strong>${r.insumo}</strong></td>
+    <td style="text-align:right;font-weight:700;color:#B5342A">${fmt(r.cantidad)}</td>
+  </tr>`).join("");
+}
+
+// ── LABORES ──────────────────────────────────────────────────────────────────
+function getLoteHa(nombre) {
+  return DATA.lotes.find(l=>l.nombre===nombre)?.ha || 0;
+}
+
+function renderLabores(){
+  const lote=gV("fl-lote"),tipo=gV("fl-tipo"),cont=gV("fl-cont");
+  popSel("fl-lote",DATA.labores.map(l=>l.lote));
+  popSel("fl-tipo",DATA.labores.map(l=>l.tipo));
+  popSel("fl-cont",DATA.labores.map(l=>l.contratista));
+  const f=DATA.labores.filter(l=>l.lote&&(!lote||l.lote===lote)&&(!tipo||l.tipo===tipo)&&(!cont||l.contratista===cont)).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+
+  // Calcular costo insumos por labor: necesitamos precio de compra por insumo
+  const precioIns = {};
+  DATA.compras.forEach(c=>{ if(c.precio && !precioIns[c.insumo]) precioIns[c.insumo]=c.precio; });
+
+  const totMO_USD = f.reduce((a,l)=>{
+    const tc=l.tc||TC;
+    return a + (l.precio_mo_ha||0)*(getLoteHa(l.lote)||0)/tc;
+  },0);
+  const totIns_USD = f.reduce((a,l)=>{
+    const tc=l.tc||TC;
+    return a + (Array.isArray(l.insumos)?l.insumos:[]).reduce((b,i)=>b+(i.cantidad||0)*(precioIns[i.nombre]||0),0);
+  },0);
+
+  ge("kpi-labores").innerHTML=`
+    <div class="kpi" style="border-color:#2D6A4F"><div class="val">${f.length}</div><div class="lbl">Labores</div></div>
+    <div class="kpi" style="border-color:#C9A84C"><div class="val">USD ${fmt(totMO_USD,0)}</div><div class="lbl">Costo M.O. (USD)</div></div>
+    <div class="kpi" style="border-color:#1A4D7C"><div class="val">USD ${fmt(totIns_USD,0)}</div><div class="lbl">Costo insumos (USD)</div></div>
+    <div class="kpi" style="border-color:#8B5E3C"><div class="val">USD ${fmt(totMO_USD+totIns_USD,0)}</div><div class="lbl">Costo total (USD)</div></div>`;
+
+  // Gráfico: costo/ha MO + costo/ha insumos por lote (USD/ha)
+  const byLote={};
+  DATA.labores.forEach(l=>{
+    if(!l.lote) return;
+    const ha = getLoteHa(l.lote) || 1;
+    const tc = l.tc || TC;
+    if(!byLote[l.lote]) byLote[l.lote]={mo:0, ins:0};
+    byLote[l.lote].mo  += (l.precio_mo_ha||0)/tc;
+    byLote[l.lote].ins += (Array.isArray(l.insumos)?l.insumos:[]).reduce((a,i)=>a+(i.cantidad||0)*(precioIns[i.nombre]||0),0)/ha;
+  });
+  const loteKeys = Object.keys(byLote).sort((a,b)=>((byLote[b].mo+byLote[b].ins)-(byLote[a].mo+byLote[a].ins))).slice(0,12);
+  dC("ch-lab");
+  charts["ch-lab"]=new Chart(ge("ch-lab"),{
+    type:"bar",
+    data:{
+      labels:loteKeys,
+      datasets:[
+        {label:"M.O. USD/ha",data:loteKeys.map(k=>parseFloat(byLote[k].mo.toFixed(2))),backgroundColor:"#2D6A4F",borderRadius:3,stack:"a"},
+        {label:"Insumos USD/ha",data:loteKeys.map(k=>parseFloat(byLote[k].ins.toFixed(2))),backgroundColor:"#C9A84C",borderRadius:3,stack:"a"},
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:"bottom",labels:{font:{size:11}}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+": USD "+fmt(ctx.raw,1)+"/ha"}}},
+      scales:{x:{stacked:true,ticks:{font:{size:10}}},y:{stacked:true,grid:{color:"#eee"},ticks:{callback:v=>"$"+fmt(v,0)},title:{display:true,text:"USD/ha",font:{size:10}}}}
+    }
+  });
+
+  // Cards de labores
+  ge("div-labores").innerHTML = f.map((l,idx)=>{
+    const ha = getLoteHa(l.lote) || 1;
+    const tc = l.tc || TC;
+    const moUSD = l.precio_mo_ha ? l.precio_mo_ha/tc : 0;
+    const moTotalUSD = moUSD * ha;
+    const insUSD = (Array.isArray(l.insumos)?l.insumos:[]).reduce((a,i)=>a+(i.cantidad||0)*(precioIns[i.nombre]||0),0);
+    const insUSDha = insUSD / ha;
+
+    const insHtml = (Array.isArray(l.insumos)?l.insumos:[]).length > 0 ? `
+      <table class="ins-table">
+        <thead><tr>
+          <th>Insumo</th>
+          <th class="r">Total</th>
+          <th class="r">/ha</th>
+          <th class="r">Precio USD/u</th>
+          <th class="r">Total USD</th>
+        </tr></thead>
+        <tbody>
+        ${(Array.isArray(l.insumos)?l.insumos:[]).map(i=>{
+          const pha = ha>0?i.cantidad/ha:0;
+          const precio = precioIns[i.nombre]||0;
+          const totUSD = i.cantidad*precio;
+          return `<tr>
+            <td><strong>${i.nombre}</strong></td>
+            <td class="r">${fmt(i.cantidad,1)}</td>
+            <td class="r" style="color:#2D6A4F;font-weight:700">${fmt(pha,2)}/ha</td>
+            <td class="r">${precio?fmt(precio,3):"—"}</td>
+            <td class="r;font-weight:700">${totUSD>0?"USD "+fmt(totUSD,0):"—"}</td>
+          </tr>`;
+        }).join("")}
+        </tbody>
+        <tfoot><tr style="background:#EEF7F2;font-weight:700">
+          <td colspan="4">TOTAL INSUMOS</td>
+          <td class="r">USD ${fmt(insUSD,0)}</td>
+        </tr></tfoot>
+      </table>` : `<div style="font-size:11px;color:#6b7280;padding:6px">Sin insumos registrados</div>`;
+
+    return `<div class="labor-card">
+      <div class="labor-header">
+        <div>
+          <span style="font-size:14px;font-weight:900">${l.lote}</span>
+          <span class="badge bg-verde" style="margin-left:6px">${l.tipo||"—"}</span>
+          <span style="font-size:11px;color:#6b7280;margin-left:8px">${l.fecha}</span>
+          ${l.cultivo?`<span class="badge bg-azul" style="margin-left:4px">${l.cultivo}</span>`:""}
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          ${l.contratista?`<span style="font-size:11px;color:#6b7280">🚜 ${l.contratista}</span>`:""}
+          ${l.precio_mo_ha?`<span style="font-size:12px;font-weight:700;color:#1A3C2E">M.O.: ${fmtP(l.precio_mo_ha)}/ha → <span style="color:#1A4D7C">USD ${fmt(moUSD,1)}/ha</span></span>`:""}
+          ${insUSDha>0?`<span style="font-size:12px;font-weight:700;color:#8B5E3C">Ins.: USD ${fmt(insUSDha,1)}/ha</span>`:""}
+          ${(Array.isArray(l.insumos)?l.insumos:[]).length?`<button class="toggle-btn" onclick="toggleDet(this)">${l.insumos.length} insumo${l.insumos.length>1?"s":""} ▼</button>`:""}
+        </div>
+      </div>
+      <div class="detail-panel">${insHtml}</div>
+    </div>`;
+  }).join("") || `<div style="color:#6b7280;text-align:center;padding:20px;font-size:13px">Sin labores para los filtros seleccionados</div>`;
+}
+
+function toggleDet(btn){
+  const p=btn.closest(".labor-card").querySelector(".detail-panel");
+  const open=p.style.display==="block";
+  p.style.display=open?"none":"block";
+  btn.textContent=open?btn.textContent.replace("▲","▼"):btn.textContent.replace("▼","▲");
+}
+
+// ── LOTES ────────────────────────────────────────────────────────────────────
+let loteFiltroConv="";
+function renderLotes(){
+  const haT=DATA.lotes.reduce((a,l)=>a+l.ha,0);
+  ge("kpi-lotes").innerHTML=`
+    <div class="kpi" style="border-color:#2D6A4F"><div class="val">${DATA.lotes.length}</div><div class="lbl">Lotes</div></div>
+    <div class="kpi" style="border-color:#C9A84C"><div class="val">${fmt(haT,0)} ha</div><div class="lbl">Hectáreas</div></div>
+    <div class="kpi" style="border-color:#1A4D7C"><div class="val">${Object.keys(DATA.convenios).length}</div><div class="lbl">Convenios</div></div>`;
+  ge("conv-tabs").innerHTML=
+    `<button class="${!loteFiltroConv?"active":""}" onclick="setConv('')">Todos</button>`+
+    Object.keys(DATA.convenios).map(c=>`<button class="${loteFiltroConv===c?"active":""}" onclick="setConv('${c}')">${c}</button>`).join("");
+  const lotes=loteFiltroConv?DATA.lotes.filter(l=>l.convenio===loteFiltroConv):DATA.lotes;
+  ge("grid-lotes").innerHTML=lotes.map(l=>`
+    <div class="card" style="border-top:4px solid #C9A84C">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+        <div>
+          <div style="font-size:14px;font-weight:900">${l.nombre}</div>
+          <div style="font-size:20px;font-weight:900;color:#1A3C2E">${fmt(l.ha,0)} <span style="font-size:11px;font-weight:400">ha</span></div>
+        </div>
+        <span class="badge bg-violeta" style="font-size:9px">${l.convenio}</span>
+      </div>
+      <div style="background:#E8E4DC;border-radius:4px;height:10px;overflow:hidden;margin-bottom:6px;display:flex">
+        <div style="width:${l.pct1}%;background:${PC[l.prod1]||"#ccc"}" title="${l.prod1}: ${fmt(l.pct1,1)}%"></div>
+        <div style="width:${l.pct2}%;background:${PC[l.prod2]||"#aaa"}" title="${l.prod2}: ${fmt(l.pct2,1)}%"></div>
+      </div>
+      ${l.prod1?`<div style="font-size:11px;display:flex;justify-content:space-between"><span><span class="dot" style="background:${PC[l.prod1]||"#ccc"}"></span>${l.prod1}</span><span style="color:#6b7280">${fmt(l.ha_p1,1)} ha (${fmt(l.pct1,1)}%)</span></div>`:""}
+      ${l.prod2?`<div style="font-size:11px;display:flex;justify-content:space-between;margin-top:2px"><span><span class="dot" style="background:${PC[l.prod2]||"#aaa"}"></span>${l.prod2}</span><span style="color:#6b7280">${fmt(l.ha_p2,1)} ha (${fmt(l.pct2,1)}%)</span></div>`:""}
+    </div>`).join("");
+}
+function setConv(c){loteFiltroConv=c;renderLotes();}
+
+// ── APORTES ──────────────────────────────────────────────────────────────────
+function renderAportes(){
+  const modo=gV("fa-modo"), filtro=gV("fa-filtro");
+  if(modo==="lote") popSel("fa-filtro",[...new Set(DATA.labores.map(l=>l.lote))]);
+  else popSel("fa-filtro",Object.keys(DATA.convenios));
+
+  const agg={};
+  DATA.labores.forEach(lab=>{
+    const grupo=modo==="lote"?lab.lote:(DATA.lotes.find(l=>l.nombre===lab.lote)?.convenio||"—");
+    if(filtro&&grupo!==filtro) return;
+    (Array.isArray(lab.insumos)?lab.insumos:[]).forEach(ins=>{
+      if(!ins.nombre) return;
+      const k=`${grupo}||${ins.nombre}`;
+      if(!agg[k]) agg[k]={grupo,insumo:ins.nombre,prod_a:lab.prod_a,prod_b:lab.prod_b,teo_a:0,real_a:0,teo_b:0,real_b:0};
+      agg[k].teo_a+=ins.cant_teo_a||0; agg[k].real_a+=ins.cant_real_a||0;
+      agg[k].teo_b+=ins.cant_teo_b||0; agg[k].real_b+=ins.cant_real_b||0;
+    });
+  });
+
+  const entries=Object.values(agg).sort((a,b)=>a.grupo.localeCompare(b.grupo)||a.insumo.localeCompare(b.insumo));
+
+  ge("tb-aportes").innerHTML=entries.length?entries.map(e=>{
+    const dA=e.real_a-e.teo_a, dB=e.real_b-e.teo_b;
+    const hA=e.teo_a>0||e.real_a>0, hB=e.teo_b>0||e.real_b>0;
+    return `<tr>
+      <td><strong>${e.grupo}</strong></td>
+      <td><span class="badge bg-trigo">${e.insumo}</span></td>
+      <td><span class="dot" style="background:${PC[e.prod_a]||"#ccc"}"></span>${e.prod_a||"—"}</td>
+      <td style="text-align:right">${hA?fmt(e.teo_a):"—"}</td>
+      <td style="text-align:right">${hA?fmt(e.real_a):"—"}</td>
+      <td style="text-align:right" class="${hA?(dA>=0?"pos":"neg"):""}">
+        ${hA?(dA>=0?"+":"")+fmt(dA):"—"}
+      </td>
+      <td><span class="dot" style="background:${PC[e.prod_b]||"#aaa"}"></span>${e.prod_b||"—"}</td>
+      <td style="text-align:right">${hB?fmt(e.teo_b):"—"}</td>
+      <td style="text-align:right">${hB?fmt(e.real_b):"—"}</td>
+      <td style="text-align:right" class="${hB?(dB>=0?"pos":"neg"):""}">
+        ${hB?(dB>=0?"+":"")+fmt(dB):"—"}
+      </td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="10" style="text-align:center;color:#6b7280;padding:16px">Sin datos de aportes</td></tr>`;
+
+  const top8=entries.filter(e=>e.teo_a>0||e.teo_b>0).slice(0,8);
+  dC("ch-aportes");
+  charts["ch-aportes"]=new Chart(ge("ch-aportes"),{
+    type:"bar",
+    data:{
+      labels:top8.map(e=>e.insumo.substring(0,20)),
+      datasets:[
+        {label:"Teórico A",data:top8.map(e=>e.teo_a),backgroundColor:"rgba(26,61,46,0.5)",borderRadius:3},
+        {label:"Real A",data:top8.map(e=>e.real_a),backgroundColor:"#1A3C2E",borderRadius:3},
+        {label:"Teórico B",data:top8.map(e=>e.teo_b),backgroundColor:"rgba(26,77,124,0.5)",borderRadius:3},
+        {label:"Real B",data:top8.map(e=>e.real_b),backgroundColor:"#1A4D7C",borderRadius:3},
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:"bottom",labels:{font:{size:10}}}},
+      scales:{x:{ticks:{font:{size:10}}},y:{grid:{color:"#eee"}}}
+    }
+  });
+}
+
+
+// ── RETIROS vs APORTES ────────────────────────────────────────────────────────
+function renderRetirosVsAportes(){
+  const ins = gV("fv-ins").toLowerCase();
+  const prod = gV("fv-prod");
+  popSel("fv-prod", DATA.retiros.map(r=>r.productor));
+
+  // Sum retiros by insumo+productor
+  const retMap = {};
+  DATA.retiros.forEach(r=>{
+    if(ins && !r.insumo.toLowerCase().includes(ins)) return;
+    if(prod && r.productor!==prod) return;
+    const k = r.insumo+"|"+r.productor;
+    retMap[k] = retMap[k]||{insumo:r.insumo,productor:r.productor,retirado:0,aportado:0};
+    retMap[k].retirado += r.cantidad;
+  });
+
+  // Sum aportes reales from labores by insumo+productor
+  DATA.labores.forEach(lab=>{
+    (Array.isArray(lab.insumos)?lab.insumos:[]).forEach(i=>{
+      if(!i.nombre) return;
+      if(ins && !i.nombre.toLowerCase().includes(ins)) return;
+      // Productor A
+      if(lab.prod_a && (!prod||lab.prod_a===prod)){
+        const kA = i.nombre+"|"+lab.prod_a;
+        if(!retMap[kA]) retMap[kA]={insumo:i.nombre,productor:lab.prod_a,retirado:0,aportado:0};
+        retMap[kA].aportado += i.cant_real_a||0;
+      }
+      // Productor B
+      if(lab.prod_b && (!prod||lab.prod_b===prod)){
+        const kB = i.nombre+"|"+lab.prod_b;
+        if(!retMap[kB]) retMap[kB]={insumo:i.nombre,productor:lab.prod_b,retirado:0,aportado:0};
+        retMap[kB].aportado += i.cant_real_b||0;
+      }
+    });
+  });
+
+  const rows = Object.values(retMap).sort((a,b)=>a.insumo.localeCompare(b.insumo));
+  const totalRet = rows.reduce((a,r)=>a+r.retirado,0);
+  const totalAp  = rows.reduce((a,r)=>a+r.aportado,0);
+  const sinAsignar = rows.filter(r=>r.retirado>0&&r.aportado===0).length;
+
+  ge("kpi-retvsap").innerHTML = `
+    <div class="kpi" style="border-color:#2D6A4F"><div class="val">${rows.length}</div><div class="lbl">Combinaciones</div></div>
+    <div class="kpi" style="border-color:#1A4D7C"><div class="val">${fmt(totalRet,0)}</div><div class="lbl">Total retirado</div></div>
+    <div class="kpi" style="border-color:#8B5E3C"><div class="val">${fmt(totalAp,0)}</div><div class="lbl">Total aportado en labores</div></div>
+    <div class="kpi" style="border-color:#DC2626"><div class="val">${sinAsignar}</div><div class="lbl">Sin asignar en labores</div></div>`;
+
+  ge("tb-retvsap").innerHTML = rows.map(r=>{
+    const dif = r.aportado - r.retirado;
+    const pct = r.retirado>0 ? Math.round(r.aportado/r.retirado*100) : 0;
+    let estado, color;
+    if(r.retirado===0&&r.aportado===0){estado="Sin datos";color="#6b7280";}
+    else if(r.aportado===0){estado="⚠ Sin asignar";color="#DC2626";}
+    else if(Math.abs(dif)<0.01){estado="✓ Exacto";color="#059669";}
+    else if(dif<0){estado=`${pct}% asignado`;color="#D97706";}
+    else{estado="Aportó más";color="#1A4D7C";}
+    return `<tr>
+      <td><strong>${r.insumo}</strong></td>
+      <td><span class="dot" style="background:${PC[r.productor]||"#ccc"}"></span>${r.productor}</td>
+      <td style="text-align:right;font-weight:700">${fmt(r.retirado,1)}</td>
+      <td style="text-align:right;font-weight:700">${r.aportado>0?fmt(r.aportado,1):"—"}</td>
+      <td style="text-align:right;font-weight:700;color:${dif>=0?"#059669":"#DC2626"}">${r.aportado>0?(dif>=0?"+":"")+fmt(dif,1):"—"}</td>
+      <td><span class="badge" style="background:${color}20;color:${color}">${estado}</span></td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="6" style="text-align:center;color:#6b7280;padding:16px">Sin retiros registrados</td></tr>`;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+try{fetchTC();}catch(e){console.log("TC fetch failed",e);}
+
+// ── Cargar datos desde Google Sheets ─────────────────────────────────────────
+const APPS_URL = "https://script.google.com/macros/s/AKfycbwIT3BlS3saw0yZOxGv1v9H7cw_sGYbzD96JHBF6l0dUrmBaF5VQm9q6uVGJhkkn7SM/exec";
+
+async function loadFromSheets() {
+  const badge = document.getElementById("tc-display");
+  showToast("⟳ Cargando datos de Google Sheets...");
+  try {
+    // Intentar fetch con mode no-cors primero, luego con cors
+    let raw = null;
+    
+    // Estrategia 1: fetch directo con redirect follow
+    try {
+      const resp = await fetch(APPS_URL, {
+        method: "GET",
+        redirect: "follow",
+        mode: "cors",
+      });
+      if(resp.ok) raw = await resp.json();
+    } catch(e1) {
+      console.log("Intento 1 fallido:", e1.message);
+    }
+    
+    // Estrategia 2: proxy CORS
+    if(!raw) {
+      try {
+        const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(APPS_URL);
+        const resp2 = await fetch(proxyUrl);
+        if(resp2.ok) raw = await resp2.json();
+      } catch(e2) {
+        console.log("Intento 2 fallido:", e2.message);
+      }
+    }
+
+    // Estrategia 3: allorigins proxy
+    if(!raw) {
+      try {
+        const proxyUrl2 = "https://api.allorigins.win/get?url=" + encodeURIComponent(APPS_URL);
+        const resp3 = await fetch(proxyUrl2);
+        if(resp3.ok) {
+          const wrapper = await resp3.json();
+          raw = JSON.parse(wrapper.contents);
+        }
+      } catch(e3) {
+        console.log("Intento 3 fallido:", e3.message);
+      }
+    }
+
+    if(!raw) throw new Error("No se pudo conectar por ninguna vía");
+
+    // Compras: skip 3 rows
+    const compras = [];
+    (raw["Compras"]||[]).slice(3).forEach(r=>{
+      if(!r[4]||!r[6]) return;
+      compras.push({
+        fecha:String(r[0]||"").substring(0,10),
+        productor:String(r[1]||""), proveedor:String(r[2]||""),
+        remito:String(r[3]||""), insumo:String(r[4]||""),
+        cantidad:parseFloat(r[6])||0, precio:parseFloat(r[7])||0
+      });
+    });
+
+    // Retiros: skip 3 rows
+    const retiros = [];
+    (raw["Retiros"]||[]).slice(3).forEach(r=>{
+      if(!r[4]||!r[6]) return;
+      retiros.push({
+        fecha:String(r[0]||"").substring(0,10),
+        productor:String(r[1]||""), proveedor:String(r[2]||""),
+        remito:String(r[3]||""), insumo:String(r[4]||""),
+        cantidad:parseFloat(r[6])||0
+      });
+    });
+
+    // Lotes: skip 2 rows
+    const lotes = [];
+    (raw["Lotes"]||[]).slice(2).forEach(r=>{
+      if(!r[0]||String(r[0]).trim()===""||String(r[0])==="TOTAL"||String(r[0])==="Lote") return;
+      const ha=parseFloat(r[1])||0, ha_p1=parseFloat(r[4])||0, ha_p2=parseFloat(r[7])||0;
+      lotes.push({
+        nombre:String(r[0]), ha, convenio:String(r[2]||""),
+        prod1:String(r[3]||""), ha_p1, pct1:ha>0?Math.round(ha_p1/ha*1000)/10:0,
+        prod2:String(r[6]||""), ha_p2, pct2:ha>0?Math.round(ha_p2/ha*1000)/10:0,
+      });
+    });
+
+    // Labores: skip 4 rows, group by fecha+lote
+    const laborMap = {};
+    (raw["Labores"]||[]).slice(4).forEach(r=>{
+      if(!r[1]) return;
+      const fecha=String(r[0]||"").substring(0,10), lote=String(r[1]);
+      const key=fecha+"|"+lote;
+      if(!laborMap[key]) laborMap[key]={
+        fecha,lote,tipos:new Set(),
+        cultivo:String(r[5]||""),contratista:String(r[6]||""),
+        tc:parseFloat(r[7])||0,precio_mo_ha:parseFloat(r[8])||0,
+        prod_a:String(r[16]||""),prod_b:String(r[21]||""),insumos:[]
+      };
+      const lab=laborMap[key];
+      if(r[4]) lab.tipos.add(String(r[4]));
+      if(!lab.contratista&&r[6]) lab.contratista=String(r[6]);
+      if(!lab.tc&&r[7]) lab.tc=parseFloat(r[7])||0;
+      if(!lab.precio_mo_ha&&r[8]) lab.precio_mo_ha=parseFloat(r[8])||0;
+      if(!lab.prod_a&&r[16]) lab.prod_a=String(r[16]);
+      if(!lab.prod_b&&r[21]) lab.prod_b=String(r[21]);
+      if(r[11]){
+        const nombre=String(r[11]);
+        if(!lab.insumos.find(i=>i.nombre===nombre))
+          lab.insumos.push({nombre,
+            cantidad:parseFloat(r[14])||0,
+            cant_teo_a:parseFloat(r[18])||0, cant_real_a:parseFloat(r[19])||0,
+            cant_teo_b:parseFloat(r[23])||0, cant_real_b:parseFloat(r[24])||0,
+          });
+      }
+    });
+    const labores=Object.values(laborMap).map(l=>{
+      l.tipo=[...l.tipos].filter(Boolean).join(" / "); delete l.tipos; return l;
+    }).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+
+    // Stock calculado
+    const sMap={};
+    compras.forEach(c=>{
+      const k=c.productor+"|"+c.proveedor+"|"+c.insumo;
+      if(!sMap[k]) sMap[k]={productor:c.productor,proveedor:c.proveedor,insumo:c.insumo,tipo:"",unidad:"",comprado:0,retirado:0,stock:0};
+      sMap[k].comprado+=c.cantidad;
+    });
+    retiros.forEach(r=>{
+      const k=r.productor+"|"+r.proveedor+"|"+r.insumo;
+      if(!sMap[k]) sMap[k]={productor:r.productor,proveedor:r.proveedor,insumo:r.insumo,tipo:"",unidad:"",comprado:0,retirado:0,stock:0};
+      sMap[k].retirado+=r.cantidad;
+    });
+    Object.values(sMap).forEach(s=>s.stock=s.comprado-s.retirado);
+
+    // Convenios
+    const convenios={};
+    lotes.forEach(l=>{if(!convenios[l.convenio])convenios[l.convenio]=[];convenios[l.convenio].push(l.nombre);});
+
+    DATA.compras=compras; DATA.retiros=retiros; DATA.lotes=lotes;
+    DATA.labores=labores; DATA.stock=Object.values(sMap); DATA.convenios=convenios;
+
+    showToast(`✓ Actualizado: ${compras.length} compras · ${retiros.length} retiros · ${labores.length} labores`);
+    const activeTab=document.querySelector(".tab.active");
+    if(activeTab) activeTab.click();
+
+  } catch(e) {
+    console.error("Sheets error:",e);
+    showToast("⚠ No se pudo conectar a Google Sheets — usando datos locales");
+  }
+}
+
+renderStock();
+loadFromSheets();
+</script>
+
+<!-- RETIROS VS APORTES -->
+<div id="page-retiros_vs" class="page">
+  <div class="kpi-row" id="kpi-retvsap"></div>
+  <div class="filters">
+    <div><label>Insumo</label><input type="text" id="fv-ins" placeholder="Buscar insumo..." oninput="renderRetirosVsAportes()"></div>
+    <div><label>Productor</label><select id="fv-prod" onchange="renderRetirosVsAportes()"><option value="">Todos</option></select></div>
+    <button class="btn-cl" onclick="clrF(['fv-ins','fv-prod'],renderRetirosVsAportes)">✕</button>
+  </div>
+  <div class="card"><h3>Retiros vs Aportes por insumo y productor</h3>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th onclick="sortTable('tb-retvsap',0)" style="cursor:pointer">Insumo</th>
+      <th onclick="sortTable('tb-retvsap',1)" style="cursor:pointer">Productor</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',2,true)">Retirado del proveedor</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',3,true)">Aportado en labores</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',4,true)">Diferencia</th>
+      <th onclick="sortTable('tb-retvsap',5)" style="cursor:pointer">Estado</th>
+    </tr></thead><tbody id="tb-retvsap"></tbody></table></div>
+  </div>
+</div>
+</body>
+</html>
