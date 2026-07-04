@@ -233,10 +233,11 @@ function popSel(id,vals){
 function showPage(id,btn){
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
-  ge("page-"+id).classList.add("active");
-  btn.classList.add("active");
+  const pageEl = ge("page-"+id);
+  if(pageEl) pageEl.classList.add("active");
+  if(btn) btn.classList.add("active");
   const fns={stock:renderStock,compras:renderCompras,retiros:renderRetiros,labores:renderLabores,lotes:renderLotes,aportes:renderAportes,retiros_vs:renderRetirosVsAportes};
-  if(fns[id]) fns[id]();
+  if(fns[id]) try{ fns[id](); } catch(e){ console.error("Error en "+id+":", e); }
 }
 
 
@@ -935,5 +936,25 @@ try{fetchTC();}catch(e){}
 renderStock();
 loadFromSheets();
 </script>
+
+<!-- RETIROS VS APORTES -->
+<div id="page-retiros_vs" class="page">
+  <div class="kpi-row" id="kpi-retvsap"></div>
+  <div class="filters">
+    <div><label>Insumo</label><input type="text" id="fv-ins" placeholder="Buscar insumo..." oninput="renderRetirosVsAportes()"></div>
+    <div><label>Productor</label><select id="fv-prod" onchange="renderRetirosVsAportes()"><option value="">Todos</option></select></div>
+    <button class="btn-cl" onclick="clrF(['fv-ins','fv-prod'],renderRetirosVsAportes)">✕</button>
+  </div>
+  <div class="card"><h3>Retiros vs Aportes por insumo y productor</h3>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th onclick="sortTable('tb-retvsap',0)" style="cursor:pointer">Insumo</th>
+      <th onclick="sortTable('tb-retvsap',1)" style="cursor:pointer">Productor</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',2,true)">Retirado del proveedor</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',3,true)">Aportado en labores</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',4,true)">Diferencia</th>
+      <th onclick="sortTable('tb-retvsap',5)" style="cursor:pointer">Estado</th>
+    </tr></thead><tbody id="tb-retvsap"></tbody></table></div>
+  </div>
+</div>
 </body>
 </html>
