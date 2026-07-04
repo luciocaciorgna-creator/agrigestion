@@ -723,10 +723,14 @@ async function loadFromSheets() {
       fetch(SHEET_URLS.Labores).then(r=>r.text()).then(parseCSV),
     ]);
 
-    // Parse Compras (skip 3 header rows: title, subtitle, headers)
+    // Parse Compras - find header row dynamically
     const compras = [];
-    rawCompras.slice(3).forEach(r=>{
-      if(!r[4]||r[4]==="") return;
+    let compHeaderIdx = 0;
+    for(let i=0;i<Math.min(rawCompras.length,6);i++){
+      if(rawCompras[i][0]==="Fecha") { compHeaderIdx=i+1; break; }
+    }
+    rawCompras.slice(compHeaderIdx).forEach(r=>{
+      if(!r[4]||r[4]===""||r[4]==="Insumo") return;
       compras.push({
         fecha:String(r[0]||"").substring(0,10),
         productor:String(r[1]||""), proveedor:String(r[2]||""),
@@ -735,10 +739,14 @@ async function loadFromSheets() {
       });
     });
 
-    // Parse Retiros (skip 3 header rows)
+    // Parse Retiros - find header row dynamically
     const retiros = [];
-    rawRetiros.slice(3).forEach(r=>{
-      if(!r[4]||r[4]==="") return;
+    let retHeaderIdx = 0;
+    for(let i=0;i<Math.min(rawRetiros.length,6);i++){
+      if(rawRetiros[i][0]==="Fecha") { retHeaderIdx=i+1; break; }
+    }
+    rawRetiros.slice(retHeaderIdx).forEach(r=>{
+      if(!r[4]||r[4]===""||r[4]==="Insumo") return;
       retiros.push({
         fecha:String(r[0]||"").substring(0,10),
         productor:String(r[1]||""), proveedor:String(r[2]||""),
@@ -747,9 +755,13 @@ async function loadFromSheets() {
       });
     });
 
-    // Parse Lotes (skip 2 header rows)
+    // Parse Lotes - find header row dynamically
     const lotes = [];
-    rawLotes.slice(2).forEach(r=>{
+    let lotHeaderIdx = 0;
+    for(let i=0;i<Math.min(rawLotes.length,6);i++){
+      if(rawLotes[i][0]==="Lote") { lotHeaderIdx=i+1; break; }
+    }
+    rawLotes.slice(lotHeaderIdx).forEach(r=>{
       if(!r[0]||r[0]===""||r[0]==="TOTAL"||r[0]==="Lote") return;
       const ha=parseFloat(r[1])||0, ha_p1=parseFloat(r[4])||0, ha_p2=parseFloat(r[7])||0;
       lotes.push({
@@ -759,36 +771,71 @@ async function loadFromSheets() {
       });
     });
 
-    // Parse Labores (skip 4 header rows) group by fecha+lote
+    // Parse Labores - detect columns by name
     const laborMap = {};
-    rawLabores.slice(4).forEach(r=>{
-      if(!r[1]||r[1]==="") return;
-      const fecha=String(r[0]||"").substring(0,10), lote=String(r[1]);
+    let labHeaderIdx = 0;
+    let lC = {fecha:0,lote:1,tipo:4,cultivo:5,contratista:6,tc:7,precio_mo_ha:8,insumo:11,cantidad:14,prod_a:16,teo_a:18,real_a:19,prod_b:21,teo_b:23,real_b:24};
+    for(let i=0;i<Math.min(rawLabores.length,8);i++){
+      const row = rawLabores[i];
+      if(row[0]==="Fecha"||row[1]==="Lote"){
+        labHeaderIdx = i+1;
+        row.forEach((h,idx)=>{
+          const c = String(h||"").replace(/\n/g," ").trim().toLowerCase();
+          if(c==="fecha") lC.fecha=idx;
+          else if(c==="lote") lC.lote=idx;
+          else if(c.includes("tipo labor")) lC.tipo=idx;
+          else if(c==="cultivo") lC.cultivo=idx;
+          else if(c==="contratista") lC.contratista=idx;
+          else if(c.includes("t.c")||c.includes("$/usd")) lC.tc=idx;
+          else if(c.includes("precio m.o")&&c.includes("$/ha")) lC.precio_mo_ha=idx;
+          else if(c==="insumo") lC.insumo=idx;
+          else if(c.includes("cantidad")&&c.includes("total")) lC.cantidad=idx;
+          else if(c.includes("productor a")&&!c.includes("cant")&&!c.includes("ha")) lC.prod_a=idx;
+          else if(c.includes("productor b")&&!c.includes("cant")&&!c.includes("ha")) lC.prod_b=idx;
+          else if(c.includes("cant")&&c.includes("teórica")&&c.includes("p.a")) lC.teo_a=idx;
+          else if(c.includes("cant")&&c.includes("real")&&c.includes("p.a")) lC.real_a=idx;
+          else if(c.includes("cant")&&c.includes("teórica")&&c.includes("p.b")) lC.teo_b=idx;
+          else if(c.includes("cant")&&c.includes("real")&&c.includes("p.b")) lC.real_b=idx;
+        });
+        console.log("Labores cols:", JSON.stringify(lC));
+        break;
+      }
+    }
+    rawLabores.slice(labHeaderIdx).forEach(r=>{
+      const lote=String(r[lC.lote]||"");
+      if(!lote||lote===""||lote==="Lote") return;
+      const fecha=String(r[lC.fecha]||"").substring(0,10);
+      if(!fecha||fecha==="Fecha") return;
       const key=fecha+"|"+lote;
       if(!laborMap[key]) laborMap[key]={
         fecha, lote, tipos:new Set(),
-        cultivo:String(r[5]||""), contratista:String(r[6]||""),
-        tc:parseFloat(r[7])||0, precio_mo_ha:parseFloat(r[8])||0,
-        prod_a:String(r[16]||""), prod_b:String(r[21]||""), insumos:[]
+        cultivo:String(r[lC.cultivo]||""), contratista:String(r[lC.contratista]||""),
+        tc:parseFloat(r[lC.tc])||0, precio_mo_ha:parseFloat(r[lC.precio_mo_ha])||0,
+        prod_a:String(r[lC.prod_a]||""), prod_b:String(r[lC.prod_b]||""), insumos:[]
       };
       const lab=laborMap[key];
-      if(r[4]) lab.tipos.add(String(r[4]));
-      if(!lab.contratista&&r[6]) lab.contratista=String(r[6]);
-      if(!lab.tc&&r[7]) lab.tc=parseFloat(r[7])||0;
-      if(!lab.precio_mo_ha&&r[8]) lab.precio_mo_ha=parseFloat(r[8])||0;
-      if(!lab.prod_a&&r[16]) lab.prod_a=String(r[16]);
-      if(!lab.prod_b&&r[21]) lab.prod_b=String(r[21]);
-      if(r[11]&&r[11]!==""){
-        const nombre=String(r[11]);
-        if(!lab.insumos.find(i=>i.nombre===nombre))
-          lab.insumos.push({nombre,
-            cantidad:parseFloat(r[14])||0,
-            cant_teo_a:parseFloat(r[18])||0, cant_real_a:parseFloat(r[19])||0,
-            cant_teo_b:parseFloat(r[23])||0, cant_real_b:parseFloat(r[24])||0,
+      const tipo=String(r[lC.tipo]||"");
+      if(tipo&&tipo!=="Tipo Labor"&&tipo!=="Tipo de Labor") lab.tipos.add(tipo);
+      if(!lab.cultivo&&r[lC.cultivo]) lab.cultivo=String(r[lC.cultivo]);
+      if(!lab.contratista&&r[lC.contratista]) lab.contratista=String(r[lC.contratista]);
+      if(!lab.tc&&r[lC.tc]) lab.tc=parseFloat(r[lC.tc])||0;
+      if(!lab.precio_mo_ha&&r[lC.precio_mo_ha]) lab.precio_mo_ha=parseFloat(r[lC.precio_mo_ha])||0;
+      if(!lab.prod_a&&r[lC.prod_a]) lab.prod_a=String(r[lC.prod_a]);
+      if(!lab.prod_b&&r[lC.prod_b]) lab.prod_b=String(r[lC.prod_b]);
+      const ins=String(r[lC.insumo]||"");
+      if(ins&&ins!=="Insumo"&&ins!==""){
+        if(!lab.insumos.find(i=>i.nombre===ins))
+          lab.insumos.push({
+            nombre:ins,
+            cantidad:parseFloat(r[lC.cantidad])||0,
+            cant_teo_a:parseFloat(r[lC.teo_a])||0,
+            cant_real_a:parseFloat(r[lC.real_a])||0,
+            cant_teo_b:parseFloat(r[lC.teo_b])||0,
+            cant_real_b:parseFloat(r[lC.real_b])||0,
           });
       }
     });
-    const labores=Object.values(laborMap).map(l=>{
+        const labores=Object.values(laborMap).map(l=>{
       l.tipo=[...l.tipos].filter(Boolean).join(" / "); delete l.tipos; return l;
     }).sort((a,b)=>b.fecha.localeCompare(a.fecha));
 
