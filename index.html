@@ -412,7 +412,10 @@ function renderLabores(){
 
   // Calcular costo insumos por labor: necesitamos precio de compra por insumo
   const precioIns = {};
-  DATA.compras.forEach(c=>{ if(c.precio && !precioIns[c.insumo]) precioIns[c.insumo]=c.precio; });
+  DATA.compras.forEach(c=>{ 
+    const p = parseNum(c.precio);
+    if(p>0 && !precioIns[c.insumo]) precioIns[c.insumo]=p; 
+  });
 
   const totMO_USD = f.reduce((a,l)=>{
     const tc=l.tc||TC;
@@ -637,18 +640,28 @@ function renderRetirosVsAportes(){
       if(!i.nombre) return;
       if(ins && !i.nombre.toLowerCase().includes(ins)) return;
       // Productor A
+      const realA = parseNum(i.cant_real_a);
+      const realB = parseNum(i.cant_real_b);
       if(lab.prod_a && (!prod||lab.prod_a===prod)){
         const kA = i.nombre+"|"+lab.prod_a;
         if(!retMap[kA]) retMap[kA]={insumo:i.nombre,productor:lab.prod_a,retirado:0,aportado:0};
-        retMap[kA].aportado += i.cant_real_a||0;
+        retMap[kA].aportado += realA;
       }
       // Productor B
       if(lab.prod_b && (!prod||lab.prod_b===prod)){
         const kB = i.nombre+"|"+lab.prod_b;
         if(!retMap[kB]) retMap[kB]={insumo:i.nombre,productor:lab.prod_b,retirado:0,aportado:0};
-        retMap[kB].aportado += i.cant_real_b||0;
+        retMap[kB].aportado += realB;
       }
     });
+  });
+  // Also include retiros even if no labor match
+  DATA.retiros.forEach(r=>{
+    if(ins && !r.insumo.toLowerCase().includes(ins)) return;
+    if(prod && r.productor!==prod) return;
+    const k = r.insumo+"|"+r.productor;
+    if(!retMap[k]) retMap[k]={insumo:r.insumo,productor:r.productor,retirado:0,aportado:0};
+    // retirado already summed above, skip
   });
 
   const rows = Object.values(retMap).sort((a,b)=>a.insumo.localeCompare(b.insumo));
@@ -712,6 +725,48 @@ function parseCSV(text) {
   }).filter(r=>r.some(c=>c!==""));
 }
 
+// Parse number from CSV - handles both "6.000" (ES locale) and "6000" (EN)
+function parseNum(val) {
+  if(val===null||val===undefined||val==="") return 0;
+  const s = String(val).trim();
+  if(s==="") return 0;
+  // Remove currency symbols and spaces
+  let clean = s.replace(/[$ ]/g,"");
+  // Detect locale: if has both . and , 
+  // ES format: "1.488,50" -> 1488.50
+  // EN format: "1,488.50" -> 1488.50  
+  // ES integer: "6.000" -> 6000
+  if(clean.includes(",") && clean.includes(".")) {
+    const lastDot = clean.lastIndexOf(".");
+    const lastComma = clean.lastIndexOf(",");
+    if(lastComma > lastDot) {
+      // ES: 1.488,50
+      clean = clean.replace(/\./g,"").replace(",",".");
+    } else {
+      // EN: 1,488.50
+      clean = clean.replace(/,/g,"");
+    }
+  } else if(clean.includes(",") && !clean.includes(".")) {
+    // Could be ES decimal: "6,5" -> 6.5
+    const parts = clean.split(",");
+    if(parts[1] && parts[1].length <= 2) {
+      clean = clean.replace(",",".");
+    } else {
+      // Thousands separator: "6,000" -> 6000
+      clean = clean.replace(/,/g,"");
+    }
+  } else if(clean.includes(".") && !clean.includes(",")) {
+    // Could be ES thousands: "6.000" -> 6000
+    const parts = clean.split(".");
+    if(parts[1] && parts[1].length === 3) {
+      // Likely thousands separator
+      clean = clean.replace(/\./g,"");
+    }
+    // else decimal: "6.5" stays as is
+  }
+  return parseFloat(clean) || 0;
+}
+
 async function loadFromSheets() {
   showToast("⟳ Cargando datos de Google Sheets...");
   try {
@@ -735,7 +790,7 @@ async function loadFromSheets() {
         fecha:String(r[0]||"").substring(0,10),
         productor:String(r[1]||""), proveedor:String(r[2]||""),
         remito:String(r[3]||""), insumo:String(r[4]||""),
-        cantidad:parseFloat(r[6])||0, precio:parseFloat(r[7])||0
+        cantidad:parseNum(r[6])||0, precio:parseNum(r[7])||0
       });
     });
 
@@ -751,7 +806,7 @@ async function loadFromSheets() {
         fecha:String(r[0]||"").substring(0,10),
         productor:String(r[1]||""), proveedor:String(r[2]||""),
         remito:String(r[3]||""), insumo:String(r[4]||""),
-        cantidad:parseFloat(r[6])||0
+        cantidad:parseNum(r[6])||0
       });
     });
 
@@ -763,7 +818,7 @@ async function loadFromSheets() {
     }
     rawLotes.slice(lotHeaderIdx).forEach(r=>{
       if(!r[0]||r[0]===""||r[0]==="TOTAL"||r[0]==="Lote") return;
-      const ha=parseFloat(r[1])||0, ha_p1=parseFloat(r[4])||0, ha_p2=parseFloat(r[7])||0;
+      const ha=parseNum(r[1])||0, ha_p1=parseNum(r[4])||0, ha_p2=parseNum(r[7])||0;
       lotes.push({
         nombre:String(r[0]), ha, convenio:String(r[2]||""),
         prod1:String(r[3]||""), ha_p1, pct1:ha>0?Math.round(ha_p1/ha*1000)/10:0,
@@ -810,7 +865,7 @@ async function loadFromSheets() {
       if(!laborMap[key]) laborMap[key]={
         fecha, lote, tipos:new Set(),
         cultivo:String(r[lC.cultivo]||""), contratista:String(r[lC.contratista]||""),
-        tc:parseFloat(r[lC.tc])||0, precio_mo_ha:parseFloat(r[lC.precio_mo_ha])||0,
+        tc:parseNum(r[lC.tc])||0, precio_mo_ha:parseNum(r[lC.precio_mo_ha])||0,
         prod_a:String(r[lC.prod_a]||""), prod_b:String(r[lC.prod_b]||""), insumos:[]
       };
       const lab=laborMap[key];
@@ -818,8 +873,8 @@ async function loadFromSheets() {
       if(tipo&&tipo!=="Tipo Labor"&&tipo!=="Tipo de Labor") lab.tipos.add(tipo);
       if(!lab.cultivo&&r[lC.cultivo]) lab.cultivo=String(r[lC.cultivo]);
       if(!lab.contratista&&r[lC.contratista]) lab.contratista=String(r[lC.contratista]);
-      if(!lab.tc&&r[lC.tc]) lab.tc=parseFloat(r[lC.tc])||0;
-      if(!lab.precio_mo_ha&&r[lC.precio_mo_ha]) lab.precio_mo_ha=parseFloat(r[lC.precio_mo_ha])||0;
+      if(!lab.tc&&r[lC.tc]) lab.tc=parseNum(r[lC.tc])||0;
+      if(!lab.precio_mo_ha&&r[lC.precio_mo_ha]) lab.precio_mo_ha=parseNum(r[lC.precio_mo_ha])||0;
       if(!lab.prod_a&&r[lC.prod_a]) lab.prod_a=String(r[lC.prod_a]);
       if(!lab.prod_b&&r[lC.prod_b]) lab.prod_b=String(r[lC.prod_b]);
       const ins=String(r[lC.insumo]||"");
@@ -827,11 +882,11 @@ async function loadFromSheets() {
         if(!lab.insumos.find(i=>i.nombre===ins))
           lab.insumos.push({
             nombre:ins,
-            cantidad:parseFloat(r[lC.cantidad])||0,
-            cant_teo_a:parseFloat(r[lC.teo_a])||0,
-            cant_real_a:parseFloat(r[lC.real_a])||0,
-            cant_teo_b:parseFloat(r[lC.teo_b])||0,
-            cant_real_b:parseFloat(r[lC.real_b])||0,
+            cantidad:parseNum(r[lC.cantidad])||0,
+            cant_teo_a:parseNum(r[lC.teo_a])||0,
+            cant_real_a:parseNum(r[lC.real_a])||0,
+            cant_teo_b:parseNum(r[lC.teo_b])||0,
+            cant_real_b:parseNum(r[lC.real_b])||0,
           });
       }
     });
