@@ -686,58 +686,47 @@ function renderRetirosVsAportes(){
 try{fetchTC();}catch(e){console.log("TC fetch failed",e);}
 
 // ── Cargar datos desde Google Sheets ─────────────────────────────────────────
-const APPS_URL = "https://script.google.com/macros/s/AKfycbwIT3BlS3saw0yZOxGv1v9H7cw_sGYbzD96JHBF6l0dUrmBaF5VQm9q6uVGJhkkn7SM/exec";
+
+// ── Cargar datos desde Google Sheets via CSV público ─────────────────────────
+const SHEET_URLS = {
+  Compras:  "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=948579892",
+  Retiros:  "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=1462828713",
+  Lotes:    "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=947146393",
+  Labores:  "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=2129901091",
+  Stock:    "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=1133517722",
+};
+
+function parseCSV(text) {
+  const lines = text.split("\n");
+  return lines.map(line => {
+    const result = [];
+    let cell = "", inQ = false;
+    for(let i=0; i<line.length; i++) {
+      const ch = line[i];
+      if(ch==='"') { inQ=!inQ; }
+      else if(ch===','&&!inQ) { result.push(cell.trim()); cell=""; }
+      else { cell+=ch; }
+    }
+    result.push(cell.trim());
+    return result;
+  }).filter(r=>r.some(c=>c!==""));
+}
 
 async function loadFromSheets() {
-  const badge = document.getElementById("tc-display");
   showToast("⟳ Cargando datos de Google Sheets...");
   try {
-    // Intentar fetch con mode no-cors primero, luego con cors
-    let raw = null;
-    
-    // Estrategia 1: fetch directo con redirect follow
-    try {
-      const resp = await fetch(APPS_URL, {
-        method: "GET",
-        redirect: "follow",
-        mode: "cors",
-      });
-      if(resp.ok) raw = await resp.json();
-    } catch(e1) {
-      console.log("Intento 1 fallido:", e1.message);
-    }
-    
-    // Estrategia 2: proxy CORS
-    if(!raw) {
-      try {
-        const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(APPS_URL);
-        const resp2 = await fetch(proxyUrl);
-        if(resp2.ok) raw = await resp2.json();
-      } catch(e2) {
-        console.log("Intento 2 fallido:", e2.message);
-      }
-    }
+    // Fetch all sheets in parallel
+    const [rawCompras, rawRetiros, rawLotes, rawLabores] = await Promise.all([
+      fetch(SHEET_URLS.Compras).then(r=>r.text()).then(parseCSV),
+      fetch(SHEET_URLS.Retiros).then(r=>r.text()).then(parseCSV),
+      fetch(SHEET_URLS.Lotes).then(r=>r.text()).then(parseCSV),
+      fetch(SHEET_URLS.Labores).then(r=>r.text()).then(parseCSV),
+    ]);
 
-    // Estrategia 3: allorigins proxy
-    if(!raw) {
-      try {
-        const proxyUrl2 = "https://api.allorigins.win/get?url=" + encodeURIComponent(APPS_URL);
-        const resp3 = await fetch(proxyUrl2);
-        if(resp3.ok) {
-          const wrapper = await resp3.json();
-          raw = JSON.parse(wrapper.contents);
-        }
-      } catch(e3) {
-        console.log("Intento 3 fallido:", e3.message);
-      }
-    }
-
-    if(!raw) throw new Error("No se pudo conectar por ninguna vía");
-
-    // Compras: skip 3 rows
+    // Parse Compras (skip 3 header rows: title, subtitle, headers)
     const compras = [];
-    (raw["Compras"]||[]).slice(3).forEach(r=>{
-      if(!r[4]||!r[6]) return;
+    rawCompras.slice(3).forEach(r=>{
+      if(!r[4]||r[4]==="") return;
       compras.push({
         fecha:String(r[0]||"").substring(0,10),
         productor:String(r[1]||""), proveedor:String(r[2]||""),
@@ -746,10 +735,10 @@ async function loadFromSheets() {
       });
     });
 
-    // Retiros: skip 3 rows
+    // Parse Retiros (skip 3 header rows)
     const retiros = [];
-    (raw["Retiros"]||[]).slice(3).forEach(r=>{
-      if(!r[4]||!r[6]) return;
+    rawRetiros.slice(3).forEach(r=>{
+      if(!r[4]||r[4]==="") return;
       retiros.push({
         fecha:String(r[0]||"").substring(0,10),
         productor:String(r[1]||""), proveedor:String(r[2]||""),
@@ -758,10 +747,10 @@ async function loadFromSheets() {
       });
     });
 
-    // Lotes: skip 2 rows
+    // Parse Lotes (skip 2 header rows)
     const lotes = [];
-    (raw["Lotes"]||[]).slice(2).forEach(r=>{
-      if(!r[0]||String(r[0]).trim()===""||String(r[0])==="TOTAL"||String(r[0])==="Lote") return;
+    rawLotes.slice(2).forEach(r=>{
+      if(!r[0]||r[0]===""||r[0]==="TOTAL"||r[0]==="Lote") return;
       const ha=parseFloat(r[1])||0, ha_p1=parseFloat(r[4])||0, ha_p2=parseFloat(r[7])||0;
       lotes.push({
         nombre:String(r[0]), ha, convenio:String(r[2]||""),
@@ -770,17 +759,17 @@ async function loadFromSheets() {
       });
     });
 
-    // Labores: skip 4 rows, group by fecha+lote
+    // Parse Labores (skip 4 header rows) group by fecha+lote
     const laborMap = {};
-    (raw["Labores"]||[]).slice(4).forEach(r=>{
-      if(!r[1]) return;
+    rawLabores.slice(4).forEach(r=>{
+      if(!r[1]||r[1]==="") return;
       const fecha=String(r[0]||"").substring(0,10), lote=String(r[1]);
       const key=fecha+"|"+lote;
       if(!laborMap[key]) laborMap[key]={
-        fecha,lote,tipos:new Set(),
-        cultivo:String(r[5]||""),contratista:String(r[6]||""),
-        tc:parseFloat(r[7])||0,precio_mo_ha:parseFloat(r[8])||0,
-        prod_a:String(r[16]||""),prod_b:String(r[21]||""),insumos:[]
+        fecha, lote, tipos:new Set(),
+        cultivo:String(r[5]||""), contratista:String(r[6]||""),
+        tc:parseFloat(r[7])||0, precio_mo_ha:parseFloat(r[8])||0,
+        prod_a:String(r[16]||""), prod_b:String(r[21]||""), insumos:[]
       };
       const lab=laborMap[key];
       if(r[4]) lab.tipos.add(String(r[4]));
@@ -789,7 +778,7 @@ async function loadFromSheets() {
       if(!lab.precio_mo_ha&&r[8]) lab.precio_mo_ha=parseFloat(r[8])||0;
       if(!lab.prod_a&&r[16]) lab.prod_a=String(r[16]);
       if(!lab.prod_b&&r[21]) lab.prod_b=String(r[21]);
-      if(r[11]){
+      if(r[11]&&r[11]!==""){
         const nombre=String(r[11]);
         if(!lab.insumos.find(i=>i.nombre===nombre))
           lab.insumos.push({nombre,
@@ -803,7 +792,7 @@ async function loadFromSheets() {
       l.tipo=[...l.tipos].filter(Boolean).join(" / "); delete l.tipos; return l;
     }).sort((a,b)=>b.fecha.localeCompare(a.fecha));
 
-    // Stock calculado
+    // Stock calculado desde compras y retiros
     const sMap={};
     compras.forEach(c=>{
       const k=c.productor+"|"+c.proveedor+"|"+c.insumo;
@@ -819,7 +808,10 @@ async function loadFromSheets() {
 
     // Convenios
     const convenios={};
-    lotes.forEach(l=>{if(!convenios[l.convenio])convenios[l.convenio]=[];convenios[l.convenio].push(l.nombre);});
+    lotes.forEach(l=>{
+      if(!convenios[l.convenio]) convenios[l.convenio]=[];
+      convenios[l.convenio].push(l.nombre);
+    });
 
     DATA.compras=compras; DATA.retiros=retiros; DATA.lotes=lotes;
     DATA.labores=labores; DATA.stock=Object.values(sMap); DATA.convenios=convenios;
@@ -830,32 +822,8 @@ async function loadFromSheets() {
 
   } catch(e) {
     console.error("Sheets error:",e);
-    showToast("⚠ No se pudo conectar a Google Sheets — usando datos locales");
+    showToast("⚠ Error al conectar — revisá que la hoja esté publicada en la web");
   }
 }
 
-renderStock();
-loadFromSheets();
-</script>
-
-<!-- RETIROS VS APORTES -->
-<div id="page-retiros_vs" class="page">
-  <div class="kpi-row" id="kpi-retvsap"></div>
-  <div class="filters">
-    <div><label>Insumo</label><input type="text" id="fv-ins" placeholder="Buscar insumo..." oninput="renderRetirosVsAportes()"></div>
-    <div><label>Productor</label><select id="fv-prod" onchange="renderRetirosVsAportes()"><option value="">Todos</option></select></div>
-    <button class="btn-cl" onclick="clrF(['fv-ins','fv-prod'],renderRetirosVsAportes)">✕</button>
-  </div>
-  <div class="card"><h3>Retiros vs Aportes por insumo y productor</h3>
-    <div style="overflow-x:auto"><table><thead><tr>
-      <th onclick="sortTable('tb-retvsap',0)" style="cursor:pointer">Insumo</th>
-      <th onclick="sortTable('tb-retvsap',1)" style="cursor:pointer">Productor</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',2,true)">Retirado del proveedor</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',3,true)">Aportado en labores</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',4,true)">Diferencia</th>
-      <th onclick="sortTable('tb-retvsap',5)" style="cursor:pointer">Estado</th>
-    </tr></thead><tbody id="tb-retvsap"></tbody></table></div>
-  </div>
-</div>
-</body>
-</html>
+>
