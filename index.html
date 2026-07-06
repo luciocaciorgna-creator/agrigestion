@@ -142,6 +142,11 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
   <div class="card" style="margin-top:14px">
     <h3>📊 Retiro vs Aporte por insumo y productor</h3>
     <div style="font-size:12px;color:#6b7280;margin-bottom:10px">Compara lo retirado del proveedor contra lo aportado en labores</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end">
+      <div><label style="font-size:11px;font-weight:700;color:#6b7280;display:block;margin-bottom:3px">Insumo</label><input type="text" id="frva-ins" placeholder="Buscar..." oninput="renderRetVsAp()" style="border:1.5px solid #D1C9BB;border-radius:8px;padding:7px 10px;font-size:13px;background:#FAFAF8;outline:none;min-width:160px"></div>
+      <div><label style="font-size:11px;font-weight:700;color:#6b7280;display:block;margin-bottom:3px">Productor</label><select id="frva-prod" onchange="renderRetVsAp()" style="border:1.5px solid #D1C9BB;border-radius:8px;padding:7px 10px;font-size:13px;background:#FAFAF8;outline:none;min-width:160px"><option value="">Todos</option></select></div>
+      <button class="btn-cl" onclick="ge('frva-ins').value='';ge('frva-prod').value='';renderRetVsAp()">✕</button>
+    </div>
     <div style="overflow-x:auto"><table><thead><tr>
       <th onclick="sortTable('tb-ret-vs-ap',0)" style="cursor:pointer">Insumo</th>
       <th onclick="sortTable('tb-ret-vs-ap',1)" style="cursor:pointer">Productor</th>
@@ -178,7 +183,8 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
   <div class="filters">
     <div><label>Ver por</label><select id="fa-modo" onchange="renderAportes()"><option value="lote">Lote</option><option value="convenio">Convenio</option></select></div>
     <div><label>Filtrar</label><select id="fa-filtro" onchange="renderAportes()"><option value="">Todos</option></select></div>
-    <button class="btn-cl" onclick="clrF(['fa-filtro'],renderAportes)">✕</button>
+    <div id="fa-conv-checks" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;max-width:500px"></div>
+    <button class="btn-cl" onclick="clrAportesFilter()">✕ Limpiar</button>
   </div>
   <div class="card"><h3>Aportes por insumo — Teórico vs Real</h3>
     <div style="overflow-x:auto"><table><thead><tr>
@@ -414,8 +420,16 @@ function renderRetiros(){
   </tr>`).join("");
 
   // Render Retiro vs Aporte section
+  renderRetVsAp();
+}
+
+function renderRetVsAp(){
+  const fIns  = (ge("frva-ins")?.value||"").toLowerCase();
+  const fProd = ge("frva-prod")?.value||"";
   const retVsAp = {};
   DATA.retiros.forEach(r=>{
+    if(fIns && !r.insumo.toLowerCase().includes(fIns)) return;
+    if(fProd && r.productor!==fProd) return;
     const k = r.insumo+"|"+r.productor;
     if(!retVsAp[k]) retVsAp[k]={insumo:r.insumo,productor:r.productor,retirado:0,aportado:0};
     retVsAp[k].retirado += parseNum(r.cantidad);
@@ -423,20 +437,23 @@ function renderRetiros(){
   DATA.labores.forEach(lab=>{
     (Array.isArray(lab.insumos)?lab.insumos:[]).forEach(i=>{
       if(!i.nombre) return;
+      if(fIns && !i.nombre.toLowerCase().includes(fIns)) return;
       const rA = parseNum(i.cant_real_a);
       const rB = parseNum(i.cant_real_b);
-      if(lab.prod_a && rA>0){
+      if(lab.prod_a && (!fProd||lab.prod_a===fProd) && rA>0){
         const k=i.nombre+"|"+lab.prod_a;
         if(!retVsAp[k]) retVsAp[k]={insumo:i.nombre,productor:lab.prod_a,retirado:0,aportado:0};
         retVsAp[k].aportado += rA;
       }
-      if(lab.prod_b && rB>0){
+      if(lab.prod_b && (!fProd||lab.prod_b===fProd) && rB>0){
         const k=i.nombre+"|"+lab.prod_b;
         if(!retVsAp[k]) retVsAp[k]={insumo:i.nombre,productor:lab.prod_b,retirado:0,aportado:0};
         retVsAp[k].aportado += rB;
       }
     });
   });
+  // populate productor select
+  popSel("frva-prod", [...new Set([...DATA.retiros.map(r=>r.productor),...DATA.labores.flatMap(l=>[l.prod_a,l.prod_b])].filter(Boolean))]);
   const rvRows = Object.values(retVsAp).sort((a,b)=>a.insumo.localeCompare(b.insumo));
   const tbRV = ge("tb-ret-vs-ap");
   if(tbRV) tbRV.innerHTML = rvRows.map(r=>{
@@ -618,50 +635,75 @@ function renderLotes(){
 function setConv(c){loteFiltroConv=c;renderLotes();}
 
 // ── APORTES ──────────────────────────────────────────────────────────────────
+let aporteConveniosSel = new Set();
+
+function clrAportesFilter(){
+  const sel = ge("fa-filtro"); if(sel) sel.value="";
+  aporteConveniosSel.clear();
+  renderAportes();
+}
+
+function toggleConvenio(conv){
+  if(aporteConveniosSel.has(conv)) aporteConveniosSel.delete(conv);
+  else aporteConveniosSel.add(conv);
+  renderAportes();
+}
+
 function renderAportes(){
   const modo=gV("fa-modo"), filtro=gV("fa-filtro");
-  if(modo==="lote") popSel("fa-filtro",[...new Set(DATA.labores.map(l=>l.lote))]);
-  else popSel("fa-filtro",Object.keys(DATA.convenios));
+  if(modo==="lote") {
+    popSel("fa-filtro",[...new Set(DATA.labores.map(l=>l.lote))]);
+    if(ge("fa-conv-checks")) ge("fa-conv-checks").innerHTML = "";
+  } else {
+    const convs = Object.keys(DATA.convenios);
+    if(ge("fa-conv-checks")) ge("fa-conv-checks").innerHTML = convs.map(c=>{
+      const sel = aporteConveniosSel.has(c);
+      return '<label style="cursor:pointer;background:'+(sel?'#1A3C2E':'#EDE9E1')+';color:'+(sel?'#C9A84C':'#1a1a1a')+';padding:5px 10px;border-radius:6px;font-size:12px;font-weight:700" onclick="toggleConvenio(this.dataset.c)" data-c="'+c+'">'+(sel?'✓ ':'')+c+'</label>';
+    }).join("");
+    if(ge("fa-filtro")) ge("fa-filtro").innerHTML = '<option value="">Todos los lotes</option>';
+  }
 
-  const agg={};
+  const agg = {};
   DATA.labores.forEach(lab=>{
-    const grupo=modo==="lote"?lab.lote:(DATA.lotes.find(l=>l.nombre===lab.lote)?.convenio||"—");
-    if(filtro&&grupo!==filtro) return;
-    (Array.isArray(lab.insumos)?lab.insumos:[]).forEach(ins=>{
+    const loteInfo = DATA.lotes.find(l=>l.nombre===lab.lote);
+    const convenio = loteInfo ? loteInfo.convenio : "—";
+    const grupo = modo==="lote" ? lab.lote : convenio;
+    if(modo==="lote" && filtro && lab.lote!==filtro) return;
+    if(modo==="convenio" && aporteConveniosSel.size>0 && !aporteConveniosSel.has(convenio)) return;
+    const insumos = Array.isArray(lab.insumos) ? lab.insumos : [];
+    insumos.forEach(ins=>{
       if(!ins.nombre) return;
-      const k=`${grupo}||${ins.nombre}`;
-      if(!agg[k]) agg[k]={grupo,insumo:ins.nombre,prod_a:lab.prod_a,prod_b:lab.prod_b,teo_a:0,real_a:0,teo_b:0,real_b:0};
-      agg[k].teo_a+=ins.cant_teo_a||0; agg[k].real_a+=ins.cant_real_a||0;
-      agg[k].teo_b+=ins.cant_teo_b||0; agg[k].real_b+=ins.cant_real_b||0;
+      const k = grupo+"|"+ins.nombre;
+      if(!agg[k]) agg[k]={grupo:grupo,insumo:ins.nombre,prod_a:lab.prod_a||"",prod_b:lab.prod_b||"",teo_a:0,real_a:0,teo_b:0,real_b:0};
+      agg[k].teo_a  += parseNum(ins.cant_teo_a);
+      agg[k].real_a += parseNum(ins.cant_real_a);
+      agg[k].teo_b  += parseNum(ins.cant_teo_b);
+      agg[k].real_b += parseNum(ins.cant_real_b);
     });
   });
 
-  const entries=Object.values(agg).sort((a,b)=>a.grupo.localeCompare(b.grupo)||a.insumo.localeCompare(b.insumo));
+  const entries = Object.values(agg).sort((a,b)=>a.grupo.localeCompare(b.grupo)||a.insumo.localeCompare(b.insumo));
 
-  ge("tb-aportes").innerHTML=entries.length?entries.map(e=>{
+  ge("tb-aportes").innerHTML = entries.length ? entries.map(e=>{
     const dA=e.real_a-e.teo_a, dB=e.real_b-e.teo_b;
     const hA=e.teo_a>0||e.real_a>0, hB=e.teo_b>0||e.real_b>0;
-    return `<tr>
-      <td><strong>${e.grupo}</strong></td>
-      <td><span class="badge bg-trigo">${e.insumo}</span></td>
-      <td><span class="dot" style="background:${PC[e.prod_a]||"#ccc"}"></span>${e.prod_a||"—"}</td>
-      <td style="text-align:right">${hA?fmt(e.teo_a):"—"}</td>
-      <td style="text-align:right">${hA?fmt(e.real_a):"—"}</td>
-      <td style="text-align:right" class="${hA?(dA>=0?"pos":"neg"):""}">
-        ${hA?(dA>=0?"+":"")+fmt(dA):"—"}
-      </td>
-      <td><span class="dot" style="background:${PC[e.prod_b]||"#aaa"}"></span>${e.prod_b||"—"}</td>
-      <td style="text-align:right">${hB?fmt(e.teo_b):"—"}</td>
-      <td style="text-align:right">${hB?fmt(e.real_b):"—"}</td>
-      <td style="text-align:right" class="${hB?(dB>=0?"pos":"neg"):""}">
-        ${hB?(dB>=0?"+":"")+fmt(dB):"—"}
-      </td>
-    </tr>`;
-  }).join("") : `<tr><td colspan="10" style="text-align:center;color:#6b7280;padding:16px">Sin datos de aportes</td></tr>`;
+    return '<tr>'
+      +'<td><strong>'+e.grupo+'</strong></td>'
+      +'<td><span class="badge bg-trigo">'+e.insumo+'</span></td>'
+      +'<td><span class="dot" style="background:'+(PC[e.prod_a]||"#ccc")+'"></span>'+(e.prod_a||"—")+'</td>'
+      +'<td style="text-align:right">'+(hA?fmt(e.teo_a):"—")+'</td>'
+      +'<td style="text-align:right">'+(hA?fmt(e.real_a):"—")+'</td>'
+      +'<td style="text-align:right;font-weight:700;color:'+(hA?(dA>=0?"#059669":"#DC2626"):"#6b7280")+'">'+(hA?(dA>=0?"+":"")+fmt(dA):"—")+'</td>'
+      +'<td><span class="dot" style="background:'+(PC[e.prod_b]||"#aaa")+'"></span>'+(e.prod_b||"—")+'</td>'
+      +'<td style="text-align:right">'+(hB?fmt(e.teo_b):"—")+'</td>'
+      +'<td style="text-align:right">'+(hB?fmt(e.real_b):"—")+'</td>'
+      +'<td style="text-align:right;font-weight:700;color:'+(hB?(dB>=0?"#059669":"#DC2626"):"#6b7280")+'">'+(hB?(dB>=0?"+":"")+fmt(dB):"—")+'</td>'
+      +'</tr>';
+  }).join("") : '<tr><td colspan="10" style="text-align:center;color:#6b7280;padding:16px">Sin datos de aportes</td></tr>';
 
-  const top8=entries.filter(e=>e.teo_a>0||e.teo_b>0).slice(0,8);
+  const top8 = entries.filter(e=>e.teo_a>0||e.teo_b>0).slice(0,8);
   dC("ch-aportes");
-  charts["ch-aportes"]=new Chart(ge("ch-aportes"),{
+  charts["ch-aportes"] = new Chart(ge("ch-aportes"),{
     type:"bar",
     data:{
       labels:top8.map(e=>e.insumo.substring(0,20)),
