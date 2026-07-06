@@ -79,7 +79,7 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
   <button class="tab" onclick="showPage('labores',this)">🚜 Labores</button>
   <button class="tab" onclick="showPage('lotes',this)">🗺️ Lotes</button>
   <button class="tab" onclick="showPage('aportes',this)">👥 Aportes</button>
-  <button class="tab" onclick="showPage('retiros_vs',this)">🔍 Retiros vs Aportes</button>
+  <button class="tab" onclick="showPage('retiros_vs',this)">📊 Aportes Insumos</button>
   <button class="tab" onclick="showPage('cosecha',this)">🌾 Cosecha</button>
 </div>
 <div id="toast" class="toast"></div>
@@ -137,6 +137,20 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
     <th>Fecha</th><th>Productor</th><th>Proveedor</th><th>Remito</th><th>Insumo</th>
     <th style="text-align:right">Cantidad</th>
   </tr></thead><tbody id="tb-retiros"></tbody></table></div></div>
+
+  <!-- Retiro vs Aporte -->
+  <div class="card" style="margin-top:14px">
+    <h3>📊 Retiro vs Aporte por insumo y productor</h3>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:10px">Compara lo retirado del proveedor contra lo aportado en labores</div>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th onclick="sortTable('tb-ret-vs-ap',0)" style="cursor:pointer">Insumo</th>
+      <th onclick="sortTable('tb-ret-vs-ap',1)" style="cursor:pointer">Productor</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-ret-vs-ap',2,true)">Retirado</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-ret-vs-ap',3,true)">Aportado en labores</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-ret-vs-ap',4,true)">Diferencia</th>
+      <th onclick="sortTable('tb-ret-vs-ap',5)" style="cursor:pointer">Estado</th>
+    </tr></thead><tbody id="tb-ret-vs-ap"></tbody></table></div>
+  </div>
 </div>
 
 <!-- LABORES -->
@@ -398,6 +412,52 @@ function renderRetiros(){
     <td><strong>${r.insumo}</strong></td>
     <td style="text-align:right;font-weight:700;color:#B5342A">${fmt(r.cantidad)}</td>
   </tr>`).join("");
+
+  // Render Retiro vs Aporte section
+  const retVsAp = {};
+  DATA.retiros.forEach(r=>{
+    const k = r.insumo+"|"+r.productor;
+    if(!retVsAp[k]) retVsAp[k]={insumo:r.insumo,productor:r.productor,retirado:0,aportado:0};
+    retVsAp[k].retirado += parseNum(r.cantidad);
+  });
+  DATA.labores.forEach(lab=>{
+    (Array.isArray(lab.insumos)?lab.insumos:[]).forEach(i=>{
+      if(!i.nombre) return;
+      const rA = parseNum(i.cant_real_a);
+      const rB = parseNum(i.cant_real_b);
+      if(lab.prod_a && rA>0){
+        const k=i.nombre+"|"+lab.prod_a;
+        if(!retVsAp[k]) retVsAp[k]={insumo:i.nombre,productor:lab.prod_a,retirado:0,aportado:0};
+        retVsAp[k].aportado += rA;
+      }
+      if(lab.prod_b && rB>0){
+        const k=i.nombre+"|"+lab.prod_b;
+        if(!retVsAp[k]) retVsAp[k]={insumo:i.nombre,productor:lab.prod_b,retirado:0,aportado:0};
+        retVsAp[k].aportado += rB;
+      }
+    });
+  });
+  const rvRows = Object.values(retVsAp).sort((a,b)=>a.insumo.localeCompare(b.insumo));
+  const tbRV = ge("tb-ret-vs-ap");
+  if(tbRV) tbRV.innerHTML = rvRows.map(r=>{
+    const dif = r.aportado - r.retirado;
+    const pct = r.retirado>0 ? Math.round(r.aportado/r.retirado*100) : 0;
+    let estado, color;
+    if(r.retirado===0&&r.aportado===0){estado="Sin datos";color="#6b7280";}
+    else if(r.retirado===0){estado="Solo aportó";color="#1A4D7C";}
+    else if(r.aportado===0){estado="⚠ Sin asignar";color="#DC2626";}
+    else if(Math.abs(dif)<0.01){estado="✓ Exacto";color="#059669";}
+    else if(dif<0){estado=pct+"% asignado";color:"#D97706";}
+    else{estado="Aportó de más";color="#1A4D7C";}
+    return `<tr>
+      <td><strong>${r.insumo}</strong></td>
+      <td><span class="dot" style="background:${PC[r.productor]||"#ccc"}"></span>${r.productor}</td>
+      <td style="text-align:right;font-weight:700">${r.retirado>0?fmt(r.retirado,1):"—"}</td>
+      <td style="text-align:right;font-weight:700">${r.aportado>0?fmt(r.aportado,1):"—"}</td>
+      <td style="text-align:right;font-weight:700;color:${dif>=0?"#059669":"#DC2626"}">${r.retirado>0||r.aportado>0?(dif>=0?"+":"")+fmt(dif,1):"—"}</td>
+      <td><span class="badge" style="background:${color}20;color:${color}">${estado}</span></td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="6" style="text-align:center;color:#6b7280;padding:16px">Sin datos</td></tr>`;
 }
 
 // ── LABORES ──────────────────────────────────────────────────────────────────
@@ -620,35 +680,19 @@ function renderAportes(){
 }
 
 
-// ── RETIROS vs APORTES ───────────────────────────────────────────────────────
+// ── APORTES INSUMOS Teórico vs Real ─────────────────────────────────────────
 function renderRetirosVsAportes(){
   const ins  = (ge("fv-ins")?.value||"").toLowerCase();
   const prod = ge("fv-prod")?.value||"";
   const lote = ge("fv-lote")?.value||"";
   const conv = ge("fv-conv")?.value||"";
 
-  // Populate selects
-  popSel("fv-prod", DATA.retiros.map(r=>r.productor));
-  popSel("fv-lote", DATA.labores.map(l=>l.lote));
+  popSel("fv-prod", DATA.labores.flatMap(l=>[l.prod_a,l.prod_b]).filter(Boolean));
+  popSel("fv-lote", DATA.labores.map(l=>l.lote).filter(Boolean));
   popSel("fv-conv", Object.keys(DATA.convenios));
 
-  // Build map: insumo+productor+lote → {retirado, aportado}
-  // For retiros: no lote info, so they go as "general"
-  // For labores: we have lote and can get convenio from DATA.lotes
+  // Aggregate by lote+insumo
   const agg = {};
-
-  // Sum retiros (no lote filtering — retiros aren't per lote)
-  if(!lote && !conv) {
-    DATA.retiros.forEach(r=>{
-      if(ins && !r.insumo.toLowerCase().includes(ins)) return;
-      if(prod && r.productor!==prod) return;
-      const k = r.insumo+"|"+r.productor+"|—|—";
-      if(!agg[k]) agg[k]={insumo:r.insumo,productor:r.productor,lote:"—",convenio:"—",retirado:0,aportado:0};
-      agg[k].retirado += parseNum(r.cantidad);
-    });
-  }
-
-  // Sum aportes reales from labores (has lote info)
   DATA.labores.forEach(lab=>{
     if(lote && lab.lote!==lote) return;
     const loteInfo = DATA.lotes.find(l=>l.nombre===lab.lote);
@@ -658,73 +702,57 @@ function renderRetirosVsAportes(){
     (Array.isArray(lab.insumos)?lab.insumos:[]).forEach(i=>{
       if(!i.nombre) return;
       if(ins && !i.nombre.toLowerCase().includes(ins)) return;
+      if(prod && lab.prod_a!==prod && lab.prod_b!==prod) return;
 
-      const realA = parseNum(i.cant_real_a);
-      const realB = parseNum(i.cant_real_b);
-
-      if(lab.prod_a && (!prod||lab.prod_a===prod) && realA>0){
-        const k = i.nombre+"|"+lab.prod_a+"|"+lab.lote+"|"+convenio;
-        if(!agg[k]) agg[k]={insumo:i.nombre,productor:lab.prod_a,lote:lab.lote,convenio,retirado:0,aportado:0};
-        agg[k].aportado += realA;
-      }
-      if(lab.prod_b && (!prod||lab.prod_b===prod) && realB>0){
-        const k = i.nombre+"|"+lab.prod_b+"|"+lab.lote+"|"+convenio;
-        if(!agg[k]) agg[k]={insumo:i.nombre,productor:lab.prod_b,lote:lab.lote,convenio,retirado:0,aportado:0};
-        agg[k].aportado += realB;
-      }
+      const k = lab.lote+"|"+i.nombre;
+      if(!agg[k]) agg[k]={
+        lote:lab.lote, convenio,
+        insumo:i.nombre,
+        prod_a:lab.prod_a||"", prod_b:lab.prod_b||"",
+        teo_a:0, real_a:0, teo_b:0, real_b:0
+      };
+      agg[k].teo_a  += parseNum(i.cant_teo_a);
+      agg[k].real_a += parseNum(i.cant_real_a);
+      agg[k].teo_b  += parseNum(i.cant_teo_b);
+      agg[k].real_b += parseNum(i.cant_real_b);
     });
   });
 
-  // If filtering by lote/conv, also add retiros for matching productores
-  if(lote || conv) {
-    DATA.retiros.forEach(r=>{
-      if(ins && !r.insumo.toLowerCase().includes(ins)) return;
-      if(prod && r.productor!==prod) return;
-      // find if this insumo+productor combo exists in agg
-      const exists = Object.values(agg).some(a=>a.insumo===r.insumo&&a.productor===r.productor);
-      if(exists) {
-        // add retiro to all matching entries
-        Object.values(agg).forEach(a=>{
-          if(a.insumo===r.insumo&&a.productor===r.productor)
-            a.retirado += parseNum(r.cantidad);
-        });
-      }
-    });
-  }
+  const rows = Object.values(agg).sort((a,b)=>a.lote.localeCompare(b.lote)||a.insumo.localeCompare(b.insumo));
 
-  const rows = Object.values(agg).sort((a,b)=>a.insumo.localeCompare(b.insumo)||a.productor.localeCompare(b.productor));
-  const totalRet = rows.reduce((a,r)=>a+r.retirado,0);
-  const totalAp  = rows.reduce((a,r)=>a+r.aportado,0);
-  const sinAsig  = rows.filter(r=>r.aportado===0&&r.retirado>0).length;
+  const totTeoA  = rows.reduce((a,r)=>a+r.teo_a,0);
+  const totRealA = rows.reduce((a,r)=>a+r.real_a,0);
+  const totTeoB  = rows.reduce((a,r)=>a+r.teo_b,0);
+  const totRealB = rows.reduce((a,r)=>a+r.real_b,0);
 
   ge("kpi-retvsap").innerHTML = `
-    <div class="kpi" style="border-color:#2D6A4F"><div class="val">${rows.length}</div><div class="lbl">Combinaciones</div></div>
-    <div class="kpi" style="border-color:#1A4D7C"><div class="val">${fmt(totalRet,1)}</div><div class="lbl">Total retirado</div></div>
-    <div class="kpi" style="border-color:#8B5E3C"><div class="val">${fmt(totalAp,1)}</div><div class="lbl">Total aportado en labores</div></div>
-    <div class="kpi" style="border-color:#DC2626"><div class="val">${sinAsig}</div><div class="lbl">Sin asignar en labores</div></div>`;
+    <div class="kpi" style="border-color:#2D6A4F"><div class="val">${rows.length}</div><div class="lbl">Combinaciones lote+insumo</div></div>
+    <div class="kpi" style="border-color:#1A3C2E"><div class="val">${fmt(totTeoA,1)}</div><div class="lbl">Teórico Prod.A</div></div>
+    <div class="kpi" style="border-color:#1A3C2E"><div class="val">${fmt(totRealA,1)}</div><div class="lbl">Real Prod.A</div></div>
+    <div class="kpi" style="border-color:#1A4D7C"><div class="val">${fmt(totTeoB,1)}</div><div class="lbl">Teórico Prod.B</div></div>
+    <div class="kpi" style="border-color:#1A4D7C"><div class="val">${fmt(totRealB,1)}</div><div class="lbl">Real Prod.B</div></div>`;
 
   ge("tb-retvsap").innerHTML = rows.length ? rows.map(r=>{
-    const dif = r.aportado - r.retirado;
-    const pct = r.retirado>0 ? Math.round(r.aportado/r.retirado*100) : 0;
-    let estado, color;
-    if(r.retirado===0&&r.aportado===0){estado="Sin datos";color="#6b7280";}
-    else if(r.retirado===0){estado="Solo aportó";color="#1A4D7C";}
-    else if(r.aportado===0){estado="⚠ Sin asignar";color="#DC2626";}
-    else if(Math.abs(dif)<0.01){estado="✓ Exacto";color="#059669";}
-    else if(dif<0){estado=`${pct}% asignado`;color="#D97706";}
-    else{estado="Aportó de más";color="#1A4D7C";}
+    const dA = r.real_a - r.teo_a;
+    const dB = r.real_b - r.teo_b;
+    const hA = r.teo_a>0||r.real_a>0;
+    const hB = r.teo_b>0||r.real_b>0;
     return `<tr>
-      <td><strong>${r.insumo}</strong></td>
-      <td><span class="dot" style="background:${PC[r.productor]||"#ccc"}"></span>${r.productor}</td>
-      <td>${r.lote}</td>
+      <td><strong>${r.lote}</strong></td>
       <td style="font-size:11px;color:#6b7280">${r.convenio}</td>
-      <td style="text-align:right;font-weight:700">${r.retirado>0?fmt(r.retirado,1):"—"}</td>
-      <td style="text-align:right;font-weight:700">${r.aportado>0?fmt(r.aportado,1):"—"}</td>
-      <td style="text-align:right;font-weight:700;color:${dif>=0?"#059669":"#DC2626"}">${r.retirado>0||r.aportado>0?(dif>=0?"+":"")+fmt(dif,1):"—"}</td>
-      <td><span class="badge" style="background:${color}20;color:${color}">${estado}</span></td>
+      <td><span class="badge bg-trigo">${r.insumo}</span></td>
+      <td><span class="dot" style="background:${PC[r.prod_a]||"#ccc"}"></span>${r.prod_a||"—"}</td>
+      <td style="text-align:right">${hA?fmt(r.teo_a,2):"—"}</td>
+      <td style="text-align:right">${hA?fmt(r.real_a,2):"—"}</td>
+      <td style="text-align:right;font-weight:700;color:${dA>=0?"#059669":"#DC2626"}">${hA?(dA>=0?"+":"")+fmt(dA,2):"—"}</td>
+      <td><span class="dot" style="background:${PC[r.prod_b]||"#ccc"}"></span>${r.prod_b||"—"}</td>
+      <td style="text-align:right">${hB?fmt(r.teo_b,2):"—"}</td>
+      <td style="text-align:right">${hB?fmt(r.real_b,2):"—"}</td>
+      <td style="text-align:right;font-weight:700;color:${dB>=0?"#059669":"#DC2626"}">${hB?(dB>=0?"+":"")+fmt(dB,2):"—"}</td>
     </tr>`;
-  }).join("") : `<tr><td colspan="8" style="text-align:center;color:#6b7280;padding:16px">Sin datos — actualizá los datos desde Google Sheets</td></tr>`;
+  }).join("") : `<tr><td colspan="11" style="text-align:center;color:#6b7280;padding:16px">Sin datos — actualizá desde Google Sheets</td></tr>`;
 }
+
 
 
 
@@ -1082,7 +1110,7 @@ renderStock();
 loadFromSheets();
 </script>
 
-<!-- RETIROS VS APORTES -->
+<!-- APORTES INSUMOS (Teórico vs Real) -->
 <div id="page-retiros_vs" class="page">
   <div class="kpi-row" id="kpi-retvsap"></div>
   <div class="filters">
@@ -1092,16 +1120,19 @@ loadFromSheets();
     <div><label>Convenio</label><select id="fv-conv" onchange="renderRetirosVsAportes()"><option value="">Todos</option></select></div>
     <button class="btn-cl" onclick="clrF(['fv-ins','fv-prod','fv-lote','fv-conv'],renderRetirosVsAportes)">✕ Limpiar</button>
   </div>
-  <div class="card"><h3>Retiros vs Aportes por insumo y productor</h3>
+  <div class="card"><h3>Aportes de insumos — Teórico vs Real por lote</h3>
     <div style="overflow-x:auto"><table><thead><tr>
-      <th onclick="sortTable('tb-retvsap',0)" style="cursor:pointer">Insumo</th>
-      <th onclick="sortTable('tb-retvsap',1)" style="cursor:pointer">Productor</th>
-      <th onclick="sortTable('tb-retvsap',2)" style="cursor:pointer">Lote</th>
-      <th onclick="sortTable('tb-retvsap',3)" style="cursor:pointer">Convenio</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',4,true)">Retirado</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',5,true)">Aportado en labores</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',6,true)">Diferencia</th>
-      <th onclick="sortTable('tb-retvsap',7)" style="cursor:pointer">Estado</th>
+      <th onclick="sortTable('tb-retvsap',0)" style="cursor:pointer">Lote</th>
+      <th onclick="sortTable('tb-retvsap',1)" style="cursor:pointer">Convenio</th>
+      <th onclick="sortTable('tb-retvsap',2)" style="cursor:pointer">Insumo</th>
+      <th onclick="sortTable('tb-retvsap',3)" style="cursor:pointer">Productor A</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',4,true)">Teórico A</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',5,true)">Real A</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',6,true)">Dif A</th>
+      <th onclick="sortTable('tb-retvsap',7)" style="cursor:pointer">Productor B</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',8,true)">Teórico B</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',9,true)">Real B</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',10,true)">Dif B</th>
     </tr></thead><tbody id="tb-retvsap"></tbody></table></div>
   </div>
 </div>
