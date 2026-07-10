@@ -992,6 +992,7 @@ const SHEET_URLS = {
   Lotes:    "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=947146393",
   Labores:  "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=2129901091",
   Stock:    "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=1133517722",
+  Cosecha:  "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=1314127385",
 };
 
 function parseCSV(text) {
@@ -1056,11 +1057,12 @@ async function loadFromSheets() {
   showToast("⟳ Cargando datos de Google Sheets...");
   try {
     // Fetch all sheets in parallel
-    const [rawCompras, rawRetiros, rawLotes, rawLabores] = await Promise.all([
+    const [rawCompras, rawRetiros, rawLotes, rawLabores, rawCosecha] = await Promise.all([
       fetch(SHEET_URLS.Compras).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Retiros).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Lotes).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Labores).then(r=>r.text()).then(parseCSV),
+      fetch(SHEET_URLS.Cosecha).then(r=>r.text()).then(parseCSV),
     ]);
 
     // Parse Compras - find header row dynamically
@@ -1200,7 +1202,7 @@ async function loadFromSheets() {
       convenios[l.convenio].push(l.nombre);
     });
 
-    // Parse Cosecha 25-26
+    // Parse Cosecha from CSV (rawCosecha)
     const LOTES_HA_MAP = {PICAPIEDRA:72,ARBOLITO:70,"RAFAEL OBLIGADO":145,BRETES:42,
       "FICARDI BAJO":40,BALIEN:12,"FICARDI LOMA":40,OMBU:4,"CHACRA DERECHA":30,
       PRIANO:20,"CHACRA IZQUIERDA":30,MANGRULLO:14,PATRICIA:33,REBISSO:30,
@@ -1236,7 +1238,7 @@ async function loadFromSheets() {
       NELIDA:[["CACIORGNA HECTOR",100]],PARRA:[["CACIORGNA HECTOR",100]],
       MAROTTA:[["CACIORGNA HECTOR",100]],SIGNIFREDI:[["CACIORGNA HECTOR",100]],
       "SIGNIFREDI 15":[["CACIORGNA HECTOR",100]],"LOS INDIOS":[["CACIORGNA HECTOR",100]]};
-    const CAMPO_NORM = {
+    const CAMPO_NORM_MAP = {
       PICAPIETRA:"PICAPIEDRA","Balien":"BALIEN","Bretes":"BRETES",
       "Ficardi":"FICARDI LOMA","Chacra":"CHACRA DERECHA","Priano":"PRIANO",
       "Mangrullo":"MANGRULLO","Marotta":"MAROTTA","Nelida":"NELIDA","Parra":"PARRA",
@@ -1244,39 +1246,42 @@ async function loadFromSheets() {
       "Signifredi 15":"SIGNIFREDI 15","Ficardi Loma":"FICARDI LOMA",
       "Ficardi Bajo":"FICARDI BAJO","Los Indios":"LOS INDIOS","REBISO":"REBISSO"};
     const GRANOS_OK = new Set(["TRIGO","SOJA","MAIZ","MAIZ FLINT"]);
-    const PROD_NORM = {"CACIORGNA HECTOR ":"CACIORGNA HECTOR",
+    const PROD_NORM_MAP = {"CACIORGNA HECTOR ":"CACIORGNA HECTOR",
       "Sucesión Caciorgna Raúl ":"SUCESION CACIORGNA RAUL",
       "SUCESION CACIORGNA RAUL ":"SUCESION CACIORGNA RAUL"};
 
-    const cosechaRaw = raw["Cosecha 25-26"]||[];
+    // Find data start row in cosecha CSV (skip headers)
+    let cosechaStartIdx = 0;
+    for(let i=0;i<Math.min(rawCosecha.length,5);i++){
+      if(rawCosecha[i][0]==="Fecha"||rawCosecha[i][1]==="Fecha") { cosechaStartIdx=i+1; break; }
+      if(i===2) cosechaStartIdx=2; // fallback
+    }
     const cosecha = [];
-    cosechaRaw.slice(2).forEach(r=>{
+    rawCosecha.slice(cosechaStartIdx).forEach(r=>{
       const campo_raw = String(r[2]||"").trim();
       const grano = String(r[4]||"").trim();
       if(!campo_raw||!grano||!GRANOS_OK.has(grano)) return;
-      const campo = (CAMPO_NORM[campo_raw]||campo_raw.toUpperCase().trim());
+      const campo = (CAMPO_NORM_MAP[campo_raw]||campo_raw.toUpperCase().trim());
       if(!LOTES_HA_MAP.hasOwnProperty(campo)) return;
       const ha = LOTES_HA_MAP[campo]||0;
       const kg_netos = parseNum(r[25]);
       const prods_def = LOTES_PROD_MAP[campo]||[];
       const neto_prods = prods_def.map(p=>({prod:p[0],pct:p[1],kg:Math.round(kg_netos*p[1]/100)}));
-      let fecha = "";
-      if(r[1] instanceof Date) fecha = r[1].toISOString().split("T")[0];
-      else if(r[1]) fecha = String(r[1]).substring(0,10);
       const titular_raw = String(r[8]||"").trim();
       cosecha.push({
-        fecha, campo, grano,
-        variedad: String(r[3]||"").trim(),
-        convenio: LOTES_CONV_MAP[campo]||"—",
-        destino:  String(r[5]||"").trim(),
-        planta:   String(r[6]||"").trim(),
-        puerto:   String(r[7]||"").trim(),
-        titular:  PROD_NORM[titular_raw]||titular_raw,
-        cp:       r[9]?String(Math.round(parseNum(r[9]))):"",
-        flete_pag:String(r[10]||"").trim(),
-        camionero:String(r[11]||"").trim(),
-        patente:  String(r[12]||"").trim(),
-        km:       parseNum(r[13]),
+        fecha: String(r[0]||"").trim().substring(0,10),
+        campo, grano,
+        variedad:  String(r[3]||"").trim(),
+        convenio:  LOTES_CONV_MAP[campo]||"—",
+        destino:   String(r[5]||"").trim(),
+        planta:    String(r[6]||"").trim(),
+        puerto:    String(r[7]||"").trim(),
+        titular:   PROD_NORM_MAP[titular_raw]||titular_raw,
+        cp:        r[9]?String(r[9]).trim():"",
+        flete_pag: String(r[10]||"").trim(),
+        camionero: String(r[11]||"").trim(),
+        patente:   String(r[12]||"").trim(),
+        km:        parseNum(r[13]),
         flete_corto: parseNum(r[15]),
         flete_largo: parseNum(r[16]),
         hum_campo:   parseNum(r[17]),
@@ -1289,7 +1294,6 @@ async function loadFromSheets() {
         kg_netos, ha, neto_prods
       });
     });
-    // Update COSECHA_DATA in place (it's a const array, so we splice)
     COSECHA_DATA.length = 0;
     cosecha.forEach(c=>COSECHA_DATA.push(c));
 
