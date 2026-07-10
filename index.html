@@ -940,11 +940,27 @@ function renderCosecha(){
     });
   });
 
+  // Calculate real retirado per productor from titular field
+  // Sum kg_netos where titular matches each productor
+  const realRetiradoMap = {};
+  f.forEach(c=>{
+    const key = c.campo+"|"+c.grano;
+    if(!realRetiradoMap[key]) realRetiradoMap[key] = {};
+    if(c.titular){
+      realRetiradoMap[key][c.titular] = (realRetiradoMap[key][c.titular]||0) + c.kg_netos;
+    }
+  });
+
   const resRows = Object.values(resMap).sort((a,b)=>a.campo.localeCompare(b.campo)||a.grano.localeCompare(b.grano));
   const gBg = {TRIGO:"#FEF3C7",SOJA:"#D1FAE5",MAIZ:"#FED7AA","MAIZ FLINT":"#DBEAFE"};
   const PC2 = {"CACIORGNA HECTOR":"#1A3C2E","PELIZZA JAVIER":"#1A4D7C","SUCESION CACIORGNA RAUL":"#8B5E3C"};
   ge("tb-cos-res").innerHTML = resRows.map(r=>{
     const p1 = r.prods[0]; const p2 = r.prods[1];
+    const retMap = realRetiradoMap[r.campo+"|"+r.grano]||{};
+    const real1 = p1 ? (retMap[p1.prod]||0) : 0;
+    const real2 = p2 ? (retMap[p2.prod]||0) : 0;
+    const dif1  = p1 ? real1 - p1.kg : 0;
+    const dif2  = p2 ? real2 - p2.kg : 0;
     return '<tr>'
       +'<td><strong>'+r.campo+'</strong></td>'
       +'<td><span class="badge" style="background:'+(gBg[r.grano]||"#F3F4F6")+';color:#374151">'+r.grano+'</span></td>'
@@ -953,11 +969,17 @@ function renderCosecha(){
       +'<td style="text-align:right">'+fmt(r.descarga,0)+'</td>'
       +'<td style="text-align:right;color:#DC2626">'+fmt(r.merma_tot,0)+'</td>'
       +'<td style="text-align:right;font-weight:800;color:#1A3C2E">'+fmt(r.kg_netos,0)+'</td>'
-      +(p1?'<td style="text-align:right"><div style="font-size:9px;color:#6b7280">'+p1.prod.split(" ")[0]+'('+p1.pct+'%)</div><strong>'+fmt(p1.kg,0)+'</strong></td>':'<td style="text-align:right">—</td>')
-      +(p2?'<td style="text-align:right"><div style="font-size:9px;color:#6b7280">'+p2.prod.split(" ")[0]+'('+p2.pct+'%)</div><strong>'+fmt(p2.kg,0)+'</strong></td>':'<td style="text-align:right">—</td>')
+      +(p1?'<td style="text-align:right"><div style="font-size:9px;color:#6b7280">'+p1.prod.split(" ")[0]+' ('+p1.pct+'%)</div><strong>'+fmt(p1.kg,0)+'</strong></td>'
+           +'<td style="text-align:right">'+(real1>0?fmt(real1,0):"—")+'</td>'
+           +'<td style="text-align:right;font-weight:700;color:'+(dif1>=0?"#059669":"#DC2626")+'">'+(real1>0?(dif1>=0?"+":"")+fmt(dif1,0):"—")+'</td>'
+          :'<td>—</td><td>—</td><td>—</td>')
+      +(p2?'<td style="text-align:right"><div style="font-size:9px;color:#6b7280">'+p2.prod.split(" ")[0]+' ('+p2.pct+'%)</div><strong>'+fmt(p2.kg,0)+'</strong></td>'
+           +'<td style="text-align:right">'+(real2>0?fmt(real2,0):"—")+'</td>'
+           +'<td style="text-align:right;font-weight:700;color:'+(dif2>=0?"#059669":"#DC2626")+'">'+(real2>0?(dif2>=0?"+":"")+fmt(dif2,0):"—")+'</td>'
+          :'<td>—</td><td>—</td><td>—</td>')
       +'<td style="text-align:right">'+r.viajes+'</td>'
       +'</tr>';
-  }).join("") || '<tr><td colspan="10" style="text-align:center;color:#6b7280;padding:16px">Sin datos</td></tr>';
+  }).join("") || '<tr><td colspan="14" style="text-align:center;color:#6b7280;padding:16px">Sin datos</td></tr>';
 
   // ── Detalle viajes ────────────────────────────────────────────────────────
   ge("tb-cos-det").innerHTML = f.map(c=>{
@@ -1239,12 +1261,24 @@ async function loadFromSheets() {
       MAROTTA:[["CACIORGNA HECTOR",100]],SIGNIFREDI:[["CACIORGNA HECTOR",100]],
       "SIGNIFREDI 15":[["CACIORGNA HECTOR",100]],"LOS INDIOS":[["CACIORGNA HECTOR",100]]};
     const CAMPO_NORM_MAP = {
-      PICAPIETRA:"PICAPIEDRA","Balien":"BALIEN","Bretes":"BRETES",
-      "Ficardi":"FICARDI LOMA","Chacra":"CHACRA DERECHA","Priano":"PRIANO",
-      "Mangrullo":"MANGRULLO","Marotta":"MAROTTA","Nelida":"NELIDA","Parra":"PARRA",
-      "Rebisso":"REBISSO","Sginifredi":"SIGNIFREDI","Signifredi":"SIGNIFREDI",
-      "Signifredi 15":"SIGNIFREDI 15","Ficardi Loma":"FICARDI LOMA",
-      "Ficardi Bajo":"FICARDI BAJO","Los Indios":"LOS INDIOS","REBISO":"REBISSO"};
+      "Picapietra":"PICAPIEDRA","PICAPIETRA":"PICAPIEDRA","PICAPIEDRA":"PICAPIEDRA",
+      "Balien":"BALIEN","BALIEN":"BALIEN",
+      "Bretes":"BRETES","BRETES":"BRETES",
+      "Ficardi":"FICARDI LOMA","Ficardi Loma":"FICARDI LOMA","FICARDI LOMA":"FICARDI LOMA",
+      "Ficardi Bajo":"FICARDI BAJO","FICARDI BAJO":"FICARDI BAJO",
+      "Chacra":"CHACRA DERECHA","CHACRA DERECHA":"CHACRA DERECHA",
+      "CHACRA IZQUIERDA":"CHACRA IZQUIERDA",
+      "Priano":"PRIANO","PRIANO":"PRIANO",
+      "Mangrullo":"MANGRULLO","MANGRULLO":"MANGRULLO",
+      "Marotta":"MAROTTA","MAROTTA":"MAROTTA",
+      "Nelida":"NELIDA","NELIDA":"NELIDA",
+      "Parra":"PARRA","PARRA":"PARRA",
+      "Rebisso":"REBISSO","REBISSO":"REBISSO","REBISO":"REBISSO",
+      "Sginifredi":"SIGNIFREDI","Signifredi":"SIGNIFREDI","SIGNIFREDI":"SIGNIFREDI",
+      "Signifredi 15":"SIGNIFREDI 15","SIGNIFREDI 15":"SIGNIFREDI 15",
+      "Los Indios":"LOS INDIOS","LOS INDIOS":"LOS INDIOS",
+      "ARBOLITO":"ARBOLITO","PATRICIA":"PATRICIA","OMBU":"OMBU",
+      "MAROTTA":"MAROTTA","MANGRULLO":"MANGRULLO","BALIEN":"BALIEN"};
     const GRANOS_OK = new Set(["TRIGO","SOJA","MAIZ","MAIZ FLINT"]);
     const PROD_NORM_MAP = {"CACIORGNA HECTOR ":"CACIORGNA HECTOR",
       "Sucesión Caciorgna Raúl ":"SUCESION CACIORGNA RAUL",
@@ -1375,9 +1409,13 @@ loadFromSheets();
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',4,true)">Descarga</th>
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',5,true)">Merma Total</th>
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',6,true)">Kg Netos</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',7,true)">Neto P.1 (kg)</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',8,true)">Neto P.2 (kg)</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',9,true)">Viajes</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',7,true)">Teórico P.1</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',8,true)">Real retirado P.1</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',9,true)">Dif P.1</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',10,true)">Teórico P.2</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',11,true)">Real retirado P.2</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',12,true)">Dif P.2</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',13,true)">Viajes</th>
     </tr></thead><tbody id="tb-cos-res"></tbody></table></div>
   </div>
   <div class="card">
