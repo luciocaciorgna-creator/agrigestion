@@ -920,34 +920,44 @@ function renderCosecha(){
       plugins:{legend:{position:"bottom",labels:{font:{size:10}}}}}
   });
 
-  // ── Resumen por campo+grano+titular ──────────────────────────────────────
+  // ── Resumen por campo+grano (una fila por combinación) ──────────────────
   const resMap = {};
   f.forEach(c=>{
-    const k = c.campo+"|"+c.grano+"|"+c.titular;
-    if(!resMap[k]) resMap[k]={campo:c.campo,grano:c.grano,titular:c.titular,
-      kg_campo:0,descarga:0,merma_tot:0,kg_netos:0,viajes:0,ha:c.ha,
-      neto_p1:0,neto_p2:0,prod1:"",prod2:"",
-      prods:c.neto_prods?c.neto_prods.map(p=>({prod:p.prod,pct:p.pct,kg:0})):[]
+    const k = c.campo+"|"+c.grano;
+    if(!resMap[k]) resMap[k]={
+      campo:c.campo, grano:c.grano,
+      kg_campo:0, descarga:0, merma_tot:0, kg_netos:0, viajes:0, ha:c.ha,
+      prods: c.neto_prods ? c.neto_prods.map(p=>({prod:p.prod,pct:p.pct})) : []
     };
     resMap[k].kg_campo  += c.kg_campo;
     resMap[k].descarga  += c.descarga;
     resMap[k].merma_tot += c.merma_tot;
     resMap[k].kg_netos  += c.kg_netos;
     resMap[k].viajes    += 1;
-    // Accumulate neto teorico por productor
-    if(c.neto_prods) c.neto_prods.forEach((p,i)=>{
-      if(resMap[k].prods[i]) resMap[k].prods[i].kg += p.kg;
-    });
+  });
+  // Recalculate teorico from total kg_netos (not per-viaje)
+  Object.values(resMap).forEach(r=>{
+    r.prods = r.prods.map(p=>({
+      prod:p.prod, pct:p.pct,
+      kg: Math.round(r.kg_netos * p.pct / 100)
+    }));
   });
 
-  // Calculate real retirado per productor from titular field
-  // Sum kg_netos where titular matches each productor
+  // Real retirado = suma de kg_netos donde titular === productor
+  // (titular CP indica quién es el dueño del grano en ese viaje)
+  const PROD_NORM_COS = {
+    "SUCESION CACIORGNA RAUL ":"SUCESION CACIORGNA RAUL",
+    "Sucesión Caciorgna Raúl":"SUCESION CACIORGNA RAUL",
+    "CACIORGNA HECTOR ":"CACIORGNA HECTOR"
+  };
   const realRetiradoMap = {};
-  f.forEach(c=>{
+  // Use ALL cosecha data (not filtered) to get totals per campo/grano/titular
+  COSECHA_DATA.forEach(c=>{
     const key = c.campo+"|"+c.grano;
     if(!realRetiradoMap[key]) realRetiradoMap[key] = {};
-    if(c.titular){
-      realRetiradoMap[key][c.titular] = (realRetiradoMap[key][c.titular]||0) + c.kg_netos;
+    const tit = PROD_NORM_COS[c.titular]||c.titular;
+    if(tit){
+      realRetiradoMap[key][tit] = (realRetiradoMap[key][tit]||0) + c.kg_netos;
     }
   });
 
@@ -957,29 +967,30 @@ function renderCosecha(){
   ge("tb-cos-res").innerHTML = resRows.map(r=>{
     const p1 = r.prods[0]; const p2 = r.prods[1];
     const retMap = realRetiradoMap[r.campo+"|"+r.grano]||{};
-    const real1 = p1 ? (retMap[p1.prod]||0) : 0;
-    const real2 = p2 ? (retMap[p2.prod]||0) : 0;
+    const real1 = p1 ? Math.round(retMap[p1.prod]||0) : 0;
+    const real2 = p2 ? Math.round(retMap[p2.prod]||0) : 0;
     const dif1  = p1 ? real1 - p1.kg : 0;
     const dif2  = p2 ? real2 - p2.kg : 0;
     return '<tr>'
       +'<td><strong>'+r.campo+'</strong></td>'
       +'<td><span class="badge" style="background:'+(gBg[r.grano]||"#F3F4F6")+';color:#374151">'+r.grano+'</span></td>'
-      +'<td style="font-size:11px"><span class="dot" style="background:'+(PC2[r.titular]||"#ccc")+'"></span>'+(r.titular||"—")+'</td>'
       +'<td style="text-align:right">'+fmt(r.kg_campo,0)+'</td>'
       +'<td style="text-align:right">'+fmt(r.descarga,0)+'</td>'
       +'<td style="text-align:right;color:#DC2626">'+fmt(r.merma_tot,0)+'</td>'
       +'<td style="text-align:right;font-weight:800;color:#1A3C2E">'+fmt(r.kg_netos,0)+'</td>'
-      +(p1?'<td style="text-align:right"><div style="font-size:9px;color:#6b7280">'+p1.prod.split(" ")[0]+' ('+p1.pct+'%)</div><strong>'+fmt(p1.kg,0)+'</strong></td>'
-           +'<td style="text-align:right">'+(real1>0?fmt(real1,0):"—")+'</td>'
-           +'<td style="text-align:right;font-weight:700;color:'+(dif1>=0?"#059669":"#DC2626")+'">'+(real1>0?(dif1>=0?"+":"")+fmt(dif1,0):"—")+'</td>'
-          :'<td>—</td><td>—</td><td>—</td>')
-      +(p2?'<td style="text-align:right"><div style="font-size:9px;color:#6b7280">'+p2.prod.split(" ")[0]+' ('+p2.pct+'%)</div><strong>'+fmt(p2.kg,0)+'</strong></td>'
-           +'<td style="text-align:right">'+(real2>0?fmt(real2,0):"—")+'</td>'
-           +'<td style="text-align:right;font-weight:700;color:'+(dif2>=0?"#059669":"#DC2626")+'">'+(real2>0?(dif2>=0?"+":"")+fmt(dif2,0):"—")+'</td>'
-          :'<td>—</td><td>—</td><td>—</td>')
+      +(p1
+        ?'<td style="text-align:right;background:#EEF7F2"><div style="font-size:9px;color:#1A3C2E;font-weight:700">'+p1.prod.split(" ")[0]+' '+p1.pct+'%</div>'+fmt(p1.kg,0)+'</td>'
+         +'<td style="text-align:right;background:#EEF7F2"><strong>'+fmt(real1,0)+'</strong></td>'
+         +'<td style="text-align:right;font-weight:700;background:#EEF7F2;color:'+(dif1>=0?"#059669":"#DC2626")+'">'+(dif1>=0?"+":"")+fmt(dif1,0)+'</td>'
+        :'<td>—</td><td>—</td><td>—</td>')
+      +(p2
+        ?'<td style="text-align:right;background:#EEF7F0"><div style="font-size:9px;color:#1A4D7C;font-weight:700">'+p2.prod.split(" ")[0]+' '+p2.pct+'%</div>'+fmt(p2.kg,0)+'</td>'
+         +'<td style="text-align:right;background:#EEF7F0"><strong>'+fmt(real2,0)+'</strong></td>'
+         +'<td style="text-align:right;font-weight:700;background:#EEF7F0;color:'+(dif2>=0?"#059669":"#DC2626")+'">'+(dif2>=0?"+":"")+fmt(dif2,0)+'</td>'
+        :'<td>—</td><td>—</td><td>—</td>')
       +'<td style="text-align:right">'+r.viajes+'</td>'
       +'</tr>';
-  }).join("") || '<tr><td colspan="14" style="text-align:center;color:#6b7280;padding:16px">Sin datos</td></tr>';
+  }).join("") || '<tr><td colspan="13" style="text-align:center;color:#6b7280;padding:16px">Sin datos</td></tr>';
 
   // ── Detalle viajes ────────────────────────────────────────────────────────
   ge("tb-cos-det").innerHTML = f.map(c=>{
@@ -1404,18 +1415,17 @@ loadFromSheets();
     <div style="overflow-x:auto"><table><thead><tr>
       <th onclick="sortTable('tb-cos-res',0)" style="cursor:pointer">Campo</th>
       <th onclick="sortTable('tb-cos-res',1)" style="cursor:pointer">Grano</th>
-      <th onclick="sortTable('tb-cos-res',2)" style="cursor:pointer">Titular</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',3,true)">Kg Campo</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',4,true)">Descarga</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',5,true)">Merma Total</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',6,true)">Kg Netos</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',7,true)">Teórico P.1</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',8,true)">Real retirado P.1</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',9,true)">Dif P.1</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',10,true)">Teórico P.2</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',11,true)">Real retirado P.2</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',12,true)">Dif P.2</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',13,true)">Viajes</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',2,true)">Kg Campo</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',3,true)">Descarga</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',4,true)">Merma Total</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',5,true)">Kg Netos</th>
+      <th style="text-align:right;background:#EEF7F2;cursor:pointer" onclick="sortTable('tb-cos-res',6,true)">Teórico P.1</th>
+      <th style="text-align:right;background:#EEF7F2;cursor:pointer" onclick="sortTable('tb-cos-res',7,true)">Real P.1</th>
+      <th style="text-align:right;background:#EEF7F2;cursor:pointer" onclick="sortTable('tb-cos-res',8,true)">Dif P.1</th>
+      <th style="text-align:right;background:#EEF7F0;cursor:pointer" onclick="sortTable('tb-cos-res',9,true)">Teórico P.2</th>
+      <th style="text-align:right;background:#EEF7F0;cursor:pointer" onclick="sortTable('tb-cos-res',10,true)">Real P.2</th>
+      <th style="text-align:right;background:#EEF7F0;cursor:pointer" onclick="sortTable('tb-cos-res',11,true)">Dif P.2</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-cos-res',12,true)">Viajes</th>
     </tr></thead><tbody id="tb-cos-res"></tbody></table></div>
   </div>
   <div class="card">
