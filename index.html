@@ -1198,7 +1198,7 @@ function renderStockGrano(){
     +'<td style="text-align:right;font-weight:700">'+fmt(s.kg_campo,0)+'</td>'
     +'<td style="text-align:right;color:#B5342A">'+fmt(s.kg_extraidos,0)+'</td>'
     +'<td style="text-align:right;font-weight:800;color:#1A3C2E">'+fmt(s.kg_restantes,0)+'</td>'
-    +'<td><button onclick="showExtracDetalle(''+s.lote+'',''+s.grano+'')" style="background:#1A3C2E;color:#C9A84C;border:none;border-radius:6px;padding:3px 10px;cursor:pointer;font-size:11px;font-weight:700">Ver</button></td>'
+    +'<td><button class="btn-extrac" data-lote="'+s.lote+'" data-grano="'+s.grano+'" style="background:#1A3C2E;color:#C9A84C;border:none;border-radius:6px;padding:3px 10px;cursor:pointer;font-size:11px;font-weight:700">Ver</button></td>'
     +'</tr>').join("") || '<tr><td colspan="9" style="text-align:center;color:#6b7280;padding:16px">Sin silobolsas</td></tr>';
 }
 
@@ -1229,6 +1229,11 @@ function showExtracDetalle(lote, grano){
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener("click", function(e){
+  if(e.target.classList.contains("btn-extrac")){
+    showExtracDetalle(e.target.dataset.lote, e.target.dataset.grano);
+  }
+});
 try{fetchTC();}catch(e){console.log("TC fetch failed",e);}
 
 // ── Cargar datos desde Google Sheets ─────────────────────────────────────────
