@@ -81,6 +81,7 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
   <button class="tab" onclick="showPage('aportes',this)">👥 Aportes</button>
   <button class="tab" onclick="showPage('retiros_vs',this)">📊 Aportes Insumos</button>
   <button class="tab" onclick="showPage('cosecha',this)">🌾 Cosecha</button>
+  <button class="tab" onclick="showPage('stockgrano',this)">🏭 Stock Grano</button>
 </div>
 <div id="toast" class="toast"></div>
 
@@ -201,6 +202,43 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
   <div class="card"><h3>Comparativo (top insumos)</h3><div class="chart-wrap"><canvas id="ch-aportes"></canvas></div></div>
 </div>
 
+
+<!-- STOCK GRANO -->
+<div id="page-stockgrano" class="page">
+  <div class="kpi-row" id="kpi-sg"></div>
+  <div class="filters">
+    <div><label>Grano</label><select id="fsg-grano" onchange="renderStockGrano()"><option value="">Todos</option></select></div>
+    <div><label>Productor</label><select id="fsg-prod" onchange="renderStockGrano()"><option value="">Todos</option></select></div>
+    <button class="btn-cl" onclick="clrF(['fsg-grano','fsg-prod'],renderStockGrano)">✕</button>
+  </div>
+  <div class="grid2" style="margin-bottom:14px">
+    <div class="card"><h3>Kg por acopio y grano</h3><div class="chart-wrap"><canvas id="ch-sg-acopio"></canvas></div></div>
+    <div class="card"><h3>Distribución por grano</h3><div class="chart-wrap"><canvas id="ch-sg-grano"></canvas></div></div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <h3>🏭 Stock en Acopios</h3>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th onclick="sortTable('tb-sg-ac',0)" style="cursor:pointer">Acopio</th>
+      <th onclick="sortTable('tb-sg-ac',1)" style="cursor:pointer">Grano</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',2,true)">Kg Totales</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',3,true)">Toneladas</th>
+      <th onclick="sortTable('tb-sg-ac',4)" style="cursor:pointer">Campos</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',5,true)">CACIORGNA</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',6,true)">PELIZZA</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',7,true)">SUCESION</th>
+    </tr></thead><tbody id="tb-sg-ac"></tbody></table></div>
+  </div>
+  <div class="card">
+    <h3>🌾 Stock en Silobolsas / Campo</h3>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th onclick="sortTable('tb-sg-sb',0)" style="cursor:pointer">Campo</th>
+      <th onclick="sortTable('tb-sg-sb',1)" style="cursor:pointer">Grano</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-sb',2,true)">Kg</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-sb',3,true)">Toneladas</th>
+    </tr></thead><tbody id="tb-sg-sb"></tbody></table></div>
+  </div>
+</div>
+
 <script>
 const SHEET_ID = "1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c";
 const PC = {"CACIORGNA HECTOR":"#1A3C2E","PELIZZA JAVIER":"#1A4D7C","SUCESION CACIORGNA RAUL":"#8B5E3C"};
@@ -257,7 +295,7 @@ function showPage(id,btn){
   const pageEl = ge("page-"+id);
   if(pageEl) pageEl.classList.add("active");
   if(btn) btn.classList.add("active");
-  const fns={stock:renderStock,compras:renderCompras,retiros:renderRetiros,labores:renderLabores,lotes:renderLotes,aportes:renderAportes,retiros_vs:renderRetirosVsAportes,cosecha:renderCosecha};
+  const fns={stock:renderStock,compras:renderCompras,retiros:renderRetiros,labores:renderLabores,lotes:renderLotes,aportes:renderAportes,retiros_vs:renderRetirosVsAportes,cosecha:renderCosecha,stockgrano:renderStockGrano};
   if(fns[id]) try{ fns[id](); } catch(e){ console.error("Error en "+id+":", e); }
 }
 
@@ -1012,6 +1050,128 @@ function renderCosecha(){
   }).join("") || '<tr><td colspan="13" style="text-align:center;color:#6b7280;padding:16px">Sin datos</td></tr>';
 }
 
+
+
+// ── STOCK GRANO ───────────────────────────────────────────────────────────────
+function renderStockGrano(){
+  const fGrano = ge("fsg-grano")?.value||"";
+  const fProd  = ge("fsg-prod")?.value||"";
+
+  popSel("fsg-grano", [...new Set(COSECHA_DATA.map(c=>c.grano))]);
+  popSel("fsg-prod",  [...new Set(COSECHA_DATA.filter(c=>c.titular).map(c=>c.titular))]);
+
+  // Build acopio data from cosecha
+  const ACOPIOS = ["CARGILL","AGD","GEA","PROTOIL"];
+  const acopioMap = {};
+  const siloMap   = {};
+
+  COSECHA_DATA.forEach(c=>{
+    if(fGrano && c.grano!==fGrano) return;
+    if(fProd  && c.titular!==fProd) return;
+
+    const dest   = (c.destino||"").toUpperCase();
+    const planta = (c.planta||"").toUpperCase();
+    const kg     = c.kg_netos;
+
+    let acopio = null;
+    for(const a of ACOPIOS){
+      if(dest.includes(a)||planta.includes(a)){ acopio=a; break; }
+    }
+
+    if(acopio){
+      const k = acopio+"|"+c.grano;
+      if(!acopioMap[k]) acopioMap[k]={acopio,grano:c.grano,kg:0,campos:new Set(),
+        titulares:{"CACIORGNA HECTOR":0,"PELIZZA JAVIER":0,"SUCESION CACIORGNA RAUL":0}};
+      acopioMap[k].kg += kg;
+      acopioMap[k].campos.add(c.campo);
+      if(c.titular && acopioMap[k].titulares.hasOwnProperty(c.titular))
+        acopioMap[k].titulares[c.titular] += kg;
+    } else {
+      const k = c.campo+"|"+c.grano;
+      if(!siloMap[k]) siloMap[k]={campo:c.campo,grano:c.grano,kg:0};
+      siloMap[k].kg += kg;
+    }
+  });
+
+  const acopioRows = Object.values(acopioMap).sort((a,b)=>a.acopio.localeCompare(b.acopio)||a.grano.localeCompare(b.grano));
+  const siloRows   = Object.values(siloMap).filter(r=>r.kg>0).sort((a,b)=>a.campo.localeCompare(b.campo));
+
+  const totAcopio = acopioRows.reduce((a,r)=>a+r.kg,0);
+  const totSilo   = siloRows.reduce((a,r)=>a+r.kg,0);
+  const totGral   = totAcopio + totSilo;
+
+  ge("kpi-sg").innerHTML =
+    '<div class="kpi" style="border-color:#2D6A4F"><div class="val">'+fmt(totGral/1000,1)+' tn</div><div class="lbl">Stock total cosechado</div></div>'+
+    '<div class="kpi" style="border-color:#1A4D7C"><div class="val">'+fmt(totAcopio/1000,1)+' tn</div><div class="lbl">En acopios</div></div>'+
+    '<div class="kpi" style="border-color:#C9A84C"><div class="val">'+fmt(totSilo/1000,1)+' tn</div><div class="lbl">En silobolsas/campo</div></div>'+
+    '<div class="kpi" style="border-color:#8B5E3C"><div class="val">'+acopioRows.length+'</div><div class="lbl">Lotes en acopio</div></div>';
+
+  // Chart por acopio
+  const byAcopio = {};
+  const granos   = [...new Set(acopioRows.map(r=>r.grano))];
+  ACOPIOS.forEach(a=>{ byAcopio[a]={}; granos.forEach(g=>byAcopio[a][g]=0); });
+  acopioRows.forEach(r=>{ if(byAcopio[r.acopio]) byAcopio[r.acopio][r.grano]=(byAcopio[r.acopio][r.grano]||0)+r.kg; });
+  const granoColors = {TRIGO:"#C9A84C",SOJA:"#2D6A4F",MAIZ:"#E8A838","MAIZ FLINT":"#1A4D7C"};
+  dC("ch-sg-acopio");
+  charts["ch-sg-acopio"] = new Chart(ge("ch-sg-acopio"),{
+    type:"bar",
+    data:{
+      labels:ACOPIOS.filter(a=>Object.values(byAcopio[a]).some(v=>v>0)),
+      datasets:granos.map(g=>({
+        label:g, stack:"a",
+        data:ACOPIOS.filter(a=>Object.values(byAcopio[a]).some(v=>v>0)).map(a=>(byAcopio[a][g]||0)/1000),
+        backgroundColor:granoColors[g]||"#888", borderRadius:3
+      }))
+    },
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:"bottom",labels:{font:{size:10}}},
+        tooltip:{callbacks:{label:ctx=>ctx.dataset.label+": "+fmt(ctx.raw,1)+" tn"}}},
+      scales:{x:{stacked:true,ticks:{font:{size:10}}},y:{stacked:true,grid:{color:"#eee"},ticks:{callback:v=>fmt(v,0)+" tn"}}}
+    }
+  });
+
+  // Chart torta por grano
+  const byGrano = {};
+  acopioRows.forEach(r=>{ byGrano[r.grano]=(byGrano[r.grano]||0)+r.kg; });
+  siloRows.forEach(r=>{ byGrano[r.grano]=(byGrano[r.grano]||0)+r.kg; });
+  dC("ch-sg-grano");
+  charts["ch-sg-grano"] = new Chart(ge("ch-sg-grano"),{
+    type:"doughnut",
+    data:{
+      labels:Object.keys(byGrano).map(g=>g+" ("+fmt(byGrano[g]/1000,0)+" tn)"),
+      datasets:[{data:Object.values(byGrano).map(v=>v/1000),
+        backgroundColor:Object.keys(byGrano).map(g=>granoColors[g]||"#888"),
+        borderWidth:2,borderColor:"#fff"}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:"bottom",labels:{font:{size:10}}}}}
+  });
+
+  // Acopio table
+  const acopioColors = {CARGILL:"#1A4D7C",AGD:"#8B5E3C",GEA:"#2D6A4F",PROTOIL:"#6B21A8"};
+  ge("tb-sg-ac").innerHTML = acopioRows.map(r=>{
+    const campos = [...r.campos].join(", ");
+    return '<tr>'
+      +'<td><span class="badge" style="background:'+(acopioColors[r.acopio]||"#555")+'20;color:'+(acopioColors[r.acopio]||"#555")+';font-size:11px;font-weight:900">'+r.acopio+'</span></td>'
+      +'<td><span class="badge bg-trigo">'+r.grano+'</span></td>'
+      +'<td style="text-align:right;font-weight:700">'+fmt(r.kg,0)+' kg</td>'
+      +'<td style="text-align:right;color:#2D6A4F;font-weight:700">'+fmt(r.kg/1000,1)+' tn</td>'
+      +'<td style="font-size:10px;color:#6b7280">'+campos+'</td>'
+      +'<td style="text-align:right;font-size:11px">'+(r.titulares["CACIORGNA HECTOR"]>0?fmt(r.titulares["CACIORGNA HECTOR"]/1000,1)+" tn":"—")+'</td>'
+      +'<td style="text-align:right;font-size:11px">'+(r.titulares["PELIZZA JAVIER"]>0?fmt(r.titulares["PELIZZA JAVIER"]/1000,1)+" tn":"—")+'</td>'
+      +'<td style="text-align:right;font-size:11px">'+(r.titulares["SUCESION CACIORGNA RAUL"]>0?fmt(r.titulares["SUCESION CACIORGNA RAUL"]/1000,1)+" tn":"—")+'</td>'
+      +'</tr>';
+  }).join("") || '<tr><td colspan="8" style="text-align:center;color:#6b7280;padding:16px">Sin datos en acopios</td></tr>';
+
+  // Silobolsa table
+  const gBg = {TRIGO:"#FEF3C7",SOJA:"#D1FAE5",MAIZ:"#FED7AA","MAIZ FLINT":"#DBEAFE"};
+  ge("tb-sg-sb").innerHTML = siloRows.map(r=>'<tr>'
+    +'<td><strong>'+r.campo+'</strong></td>'
+    +'<td><span class="badge" style="background:'+(gBg[r.grano]||"#F3F4F6")+';color:#374151">'+r.grano+'</span></td>'
+    +'<td style="text-align:right;font-weight:700">'+fmt(r.kg,0)+' kg</td>'
+    +'<td style="text-align:right;color:#2D6A4F;font-weight:700">'+fmt(r.kg/1000,1)+' tn</td>'
+    +'</tr>').join("") || '<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:16px">Sin stock en silobolsas</td></tr>';
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 try{fetchTC();}catch(e){console.log("TC fetch failed",e);}
