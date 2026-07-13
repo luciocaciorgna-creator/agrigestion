@@ -23,11 +23,17 @@ body{font-family:"Segoe UI",system-ui,sans-serif;background:#F0EBE1;color:#1a1a1
 .sidebar .tab:hover{background:rgba(255,255,255,0.07)}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:250}
 .sidebar-overlay.open{display:block}
+body.sidebar-push{padding-left:240px}
+body{transition:padding-left 0.25s ease}
+.menu-group-head{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;background:transparent;color:rgba(255,255,255,0.85);border:none;padding:13px 20px;cursor:pointer;font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;border-top:1px solid rgba(255,255,255,0.08)}
+.menu-group-head:hover{background:rgba(255,255,255,0.06)}
+.menu-group-head .chev{transition:transform 0.2s;font-size:10px;color:rgba(255,255,255,0.5)}
+.menu-group.collapsed .chev{transform:rotate(-90deg)}
+.menu-group-body{overflow:hidden;max-height:600px;transition:max-height 0.25s ease}
+.menu-group.collapsed .menu-group-body{max-height:0}
+.menu-group .tab{padding-left:34px;font-size:12.5px}
 @media(min-width:900px){
-  .sidebar{transform:translateX(0)}
-  .sidebar-overlay{display:none!important}
-  .sidebar-close{display:none}
-  body{padding-left:240px}
+  body.sidebar-push{padding-left:240px}
 }
 .header h1{color:#C9A84C;font-size:19px;font-weight:900}
 .header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -113,16 +119,34 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
     <h1>🌾 Menú</h1>
     <button class="sidebar-close" onclick="toggleSidebar()" aria-label="Cerrar menú">✕</button>
   </div>
-  <button class="tab active" onclick="showPage('stock',this)">📦 Stock</button>
-  <button class="tab" onclick="showPage('compras',this)">🛒 Compras</button>
-  <button class="tab" onclick="showPage('retiros',this)">↔ Retiros</button>
-  <button class="tab" onclick="showPage('labores',this)">🚜 Labores</button>
-  <button class="tab" onclick="showPage('lotes',this)">🗺️ Lotes</button>
-  <button class="tab" onclick="showPage('aportes',this)">👥 Aportes</button>
-  <button class="tab" onclick="showPage('retiros_vs',this)">📊 Aportes Insumos</button>
-  <button class="tab" onclick="showPage('cosecha',this)">🌾 Cosecha</button>
-  <button class="tab" onclick="showPage('stockgrano',this)">🏭 Stock Grano</button>
-  <button class="tab" onclick="showPage('ventas',this)">💰 Ventas</button>
+  <div class="menu-group">
+    <button class="menu-group-head" onclick="toggleGroup(this)">📦 Insumos <span class="chev">▾</span></button>
+    <div class="menu-group-body">
+      <button class="tab active" onclick="showPage('stock',this)">📦 Stock</button>
+      <button class="tab" onclick="showPage('compras',this)">🛒 Compras</button>
+      <button class="tab" onclick="showPage('retiros',this)">↔ Retiros</button>
+    </div>
+  </div>
+
+  <div class="menu-group">
+    <button class="menu-group-head" onclick="toggleGroup(this)">🚜 Labores <span class="chev">▾</span></button>
+    <div class="menu-group-body">
+      <button class="tab" onclick="showPage('labores',this)">🚜 Registro de labores</button>
+      <button class="tab" onclick="showPage('aportes',this)">👥 Aportes</button>
+      <button class="tab" onclick="showPage('retiros_vs',this)">📊 Aportes Insumos</button>
+    </div>
+  </div>
+
+  <div class="menu-group">
+    <button class="menu-group-head" onclick="toggleGroup(this)">🌾 Cosecha <span class="chev">▾</span></button>
+    <div class="menu-group-body">
+      <button class="tab" onclick="showPage('cosecha',this)">🌾 Movimiento de cosecha</button>
+      <button class="tab" onclick="showPage('stockgrano',this)">🏭 Stock Grano</button>
+      <button class="tab" onclick="showPage('ventas',this)">💰 Ventas</button>
+    </div>
+  </div>
+
+  <button class="tab" onclick="showPage('lotes',this)" style="border-top:1px solid rgba(255,255,255,0.08)">🗺️ Lotes</button>
 </nav>
 <div id="toast" class="toast"></div>
 
@@ -270,7 +294,13 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',3,true)">Kg Entregados</th>
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',4,true)">Kg Vendidos</th>
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',5,true)">Stock Actual</th>
+      <th style="text-align:center">Alertas</th>
     </tr></thead><tbody id="tb-sg-ac"></tbody></table></div>
+    <!-- Detalle de condiciones/alertas de acopio -->
+    <div id="sg-cond-detail" style="display:none;margin-top:14px">
+      <h3 style="font-size:13px;font-weight:800;color:#1A3C2E;margin-bottom:8px">📋 Detalle de condiciones</h3>
+      <div id="sg-cond-detail-body"></div>
+    </div>
   </div>
   <div class="card">
     <h3>🌾 Stock en Silobolsas</h3>
@@ -386,9 +416,23 @@ function popSel(id,vals){
   });
   s.value=c;
 }
-function toggleSidebar(){
-  ge("sidebar").classList.toggle("open");
-  ge("sidebar-overlay").classList.toggle("open");
+function toggleSidebar(force){
+  const sidebar = ge("sidebar");
+  const overlay = ge("sidebar-overlay");
+  const isOpen  = sidebar.classList.contains("open");
+  const willOpen = force!==undefined ? force : !isOpen;
+  sidebar.classList.toggle("open", willOpen);
+  if(window.innerWidth>=900){
+    document.body.classList.toggle("sidebar-push", willOpen);
+    overlay.classList.remove("open");
+  } else {
+    overlay.classList.toggle("open", willOpen);
+    document.body.classList.remove("sidebar-push");
+  }
+}
+
+function toggleGroup(btn){
+  btn.parentElement.classList.toggle("collapsed");
 }
 
 function showPage(id,btn){
@@ -1232,6 +1276,69 @@ function renderCosecha(){
 
 
 // ── STOCK GRANO ───────────────────────────────────────────────────────────────
+// Devuelve la cantidad de días hasta la fecha más próxima (puede ser negativa si venció)
+// entre todas las condiciones generales + detalle GEA pasadas, o null si no hay ninguna fecha.
+function diasMasProximo(generales, geaDet){
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  let min = null;
+  (generales||[]).forEach(c=>{
+    [parseFechaCondicion(c.almacenaje_libre), parseFechaCondicion(c.fecha_max_fijacion)].forEach(p=>{
+      if(p.tipo==="fecha"){
+        const d = Math.round((new Date(p.iso+"T00:00:00")-hoy)/86400000);
+        if(min===null||d<min) min=d;
+      }
+    });
+  });
+  (geaDet||[]).forEach(c=>{
+    const p = parseFechaCondicion(c.almacenaje_libre_hasta);
+    if(p.tipo==="fecha"){
+      const d = Math.round((new Date(p.iso+"T00:00:00")-hoy)/86400000);
+      if(min===null||d<min) min=d;
+    }
+  });
+  return min;
+}
+
+function showCondicionDetalle(acopio, grano, productor){
+  const panel = ge("sg-cond-detail");
+  const body  = ge("sg-cond-detail-body");
+  if(!panel||!body) return;
+  const generales = CONDICIONES_GENERAL.filter(c=>c.acopio===acopio && c.grano===grano);
+  const geaDet = acopio==="GEA" ? CONDICIONES_GEA_DETALLE.filter(c=>c.productor===productor && c.grano===grano) : [];
+  if(generales.length===0 && geaDet.length===0){ panel.style.display="none"; return; }
+
+  let html = '<div style="font-size:11px;font-weight:700;color:#6b7280;margin-bottom:8px">'+acopio+' · '+grano+(productor?' · '+productor:'')+'</div>';
+
+  if(generales.length){
+    html += '<div style="overflow-x:auto"><table style="margin-bottom:'+(geaDet.length?'12px':'0')+'"><thead><tr>'
+      +'<th>Ubicación</th><th>Almacenaje libre hasta</th><th>Costo almacenaje</th><th>Fecha máxima fijación</th>'
+      +'</tr></thead><tbody>'
+      +generales.map(c=>'<tr>'
+        +'<td>'+c.ubicacion+'</td>'
+        +'<td>'+(c.almacenaje_libre||"—")+'</td>'
+        +'<td>'+(c.costo_almacenaje||"—")+'</td>'
+        +'<td>'+(c.fecha_max_fijacion||"—")+'</td>'
+        +'</tr>').join("")
+      +'</tbody></table></div>';
+  }
+  if(geaDet.length){
+    html += '<div style="overflow-x:auto"><table><thead><tr>'
+      +'<th>Grano</th><th>Kg</th><th>Cosecha</th><th>Almacenaje libre hasta</th>'
+      +'</tr></thead><tbody>'
+      +geaDet.map(c=>'<tr>'
+        +'<td>'+c.grano+'</td>'
+        +'<td style="text-align:right">'+fmt(c.kg,0)+'</td>'
+        +'<td>'+(c.campaña||"—")+'</td>'
+        +'<td>'+(c.almacenaje_libre_hasta||"—")+'</td>'
+        +'</tr>').join("")
+      +'</tbody></table></div>';
+  }
+  body.innerHTML = html;
+  panel.style.display = "block";
+  panel.scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+
+
 // ── Alertas de condiciones de acopio (hoja "Condiciones 25-26") ────────────────
 function renderAlertasCondiciones(){
   const cont = ge("sg-alertas");
@@ -1398,6 +1505,12 @@ function renderStockGrano(){
 
   ge("tb-sg-ac").innerHTML = acopioProdFiltered.map(r=>{
     const acopioColor = acopioColors[r.acopio] || (r.acopio.startsWith("PROTOIL")?"#6B21A8":"#555");
+    const generales = CONDICIONES_GENERAL.filter(c=>c.acopio===r.acopio && c.grano===r.grano);
+    const geaDet = r.acopio==="GEA" ? CONDICIONES_GEA_DETALLE.filter(c=>c.productor===r.productor && c.grano===r.grano) : [];
+    const dias = diasMasProximo(generales, geaDet);
+    const hasCond = generales.length>0 || geaDet.length>0;
+    const dColor = dias===null ? "#9CA3AF" : (dias<=15?"#DC2626":(dias<=30?"#C9A84C":"#2D6A4F"));
+    const dLabel = dias===null ? "Ver" : (dias<0 ? "Vencido" : dias+"d");
     return '<tr>'
       +'<td><span class="dot" style="background:'+(prodColors[r.productor]||"#888")+'"></span><span style="font-size:11px">'+r.productor+'</span></td>'
       +'<td><span class="badge" style="background:'+acopioColor+'20;color:'+acopioColor+';font-size:11px;font-weight:900">'+r.acopio+'</span></td>'
@@ -1405,8 +1518,13 @@ function renderStockGrano(){
       +'<td style="text-align:right">'+fmt(r.entregado,0)+' kg</td>'
       +'<td style="text-align:right">'+fmt(r.vendido,0)+' kg</td>'
       +'<td style="text-align:right;font-weight:800;color:#1A3C2E">'+fmt(r.stock_actual,0)+' kg</td>'
+      +'<td style="text-align:center">'
+      +(hasCond
+        ? '<button class="btn-cond" data-acopio="'+r.acopio+'" data-grano="'+r.grano+'" data-productor="'+r.productor+'" style="background:'+dColor+'22;border:1.5px solid '+dColor+';color:'+dColor+';border-radius:12px;padding:3px 10px;font-size:10px;font-weight:800;cursor:pointer">'+dLabel+'</button>'
+        : '<span style="color:#D1D5DB;font-size:11px">—</span>')
+      +'</td>'
       +'</tr>';
-  }).join("") || '<tr><td colspan="6" style="text-align:center;color:#6b7280;padding:16px">Sin datos en acopios — actualizá desde Google Sheets</td></tr>';
+  }).join("") || '<tr><td colspan="7" style="text-align:center;color:#6b7280;padding:16px">Sin datos en acopios — actualizá desde Google Sheets</td></tr>';
 
   // Silobolsa table - use SILOBOLSAS_DATA directly
   const gBg2 = {TRIGO:"#FEF3C7",SOJA:"#D1FAE5",MAIZ:"#FED7AA","MAIZ FLINT":"#DBEAFE"};
@@ -1597,7 +1715,11 @@ document.addEventListener("click", function(e){
   if(e.target.classList.contains("btn-extrac")){
     showExtracDetalle(e.target.dataset.silobolsa, e.target.dataset.grano);
   }
+  if(e.target.classList.contains("btn-cond")){
+    showCondicionDetalle(e.target.dataset.acopio, e.target.dataset.grano, e.target.dataset.productor);
+  }
 });
+if(window.innerWidth>=900) toggleSidebar(true);
 try{fetchTC();}catch(e){console.log("TC fetch failed",e);}
 
 // ── Cargar datos desde Google Sheets ─────────────────────────────────────────
