@@ -268,6 +268,10 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
     <div class="card"><h3>Kg vendidos por grano</h3><div class="chart-wrap"><canvas id="ch-vt-grano"></canvas></div></div>
     <div class="card"><h3>Kg vendidos por productor</h3><div class="chart-wrap"><canvas id="ch-vt-prod"></canvas></div></div>
   </div>
+  <div class="card" style="margin-bottom:14px">
+    <h3>Kg vendidos vs Kg restantes por vender (Productor · Acopio · Grano)</h3>
+    <div style="position:relative" id="ch-vt-comp-wrap"><canvas id="ch-vt-comp"></canvas></div>
+  </div>
   <div class="card">
     <h3>💰 Detalle de ventas</h3>
     <div style="overflow-x:auto"><table><thead><tr>
@@ -1388,6 +1392,49 @@ function renderVentas(){
     }
   });
 
+  // ── Comparativo: Kg vendidos vs Kg restantes por vender ──────────────────
+  // "Restante por vender" = Stock Actual de la hoja "Stock Grano" (Entregado - Vendido),
+  // cruzado por Productor · Acopio · Grano contra lo efectivamente vendido en esta hoja.
+  const vendidoMap = {};
+  f.forEach(v=>{
+    const k = v.productor+"|"+v.acopio+"|"+v.grano;
+    vendidoMap[k] = (vendidoMap[k]||0) + v.cantidad;
+  });
+  const restanteMap = {};
+  STOCKGRANO_ACOPIO.forEach(r=>{
+    if(fGrano && r.grano!==fGrano) return;
+    if(fProd  && r.productor!==fProd) return;
+    const k = r.productor+"|"+r.acopio+"|"+r.grano;
+    restanteMap[k] = (restanteMap[k]||0) + r.stock_actual;
+  });
+  const compKeys = new Set([...Object.keys(vendidoMap), ...Object.keys(restanteMap)]);
+  const compRows = [...compKeys].map(k=>{
+    const [productor,acopio,grano] = k.split("|");
+    return { productor, acopio, grano, vendido: vendidoMap[k]||0, restante: restanteMap[k]||0 };
+  }).filter(r=>r.vendido>0 || r.restante>0)
+    .sort((a,b)=>(b.vendido+b.restante)-(a.vendido+a.restante));
+
+  const compWrap = ge("ch-vt-comp-wrap");
+  if(compWrap) compWrap.style.height = Math.max(220, 46+compRows.length*30)+"px";
+  dC("ch-vt-comp");
+  charts["ch-vt-comp"] = new Chart(ge("ch-vt-comp"),{
+    type:"bar",
+    data:{
+      labels: compRows.map(r=>(r.productor.split(" ")[0]==="SUCESION"?"SUCESION":r.productor.split(" ")[0])+" · "+r.acopio+" · "+r.grano),
+      datasets:[
+        { label:"Vendido", data:compRows.map(r=>r.vendido/1000), backgroundColor:"#2D6A4F", borderRadius:3 },
+        { label:"Restante por vender", data:compRows.map(r=>r.restante/1000), backgroundColor:"#C9A84C", borderRadius:3 }
+      ]
+    },
+    options:{
+      indexAxis:"y", responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:"bottom",labels:{font:{size:10}}},
+        tooltip:{callbacks:{label:ctx=>ctx.dataset.label+": "+fmt(ctx.raw,1)+" tn"}}},
+      scales:{x:{stacked:false,grid:{color:"#eee"},ticks:{callback:v=>fmt(v,0)+" tn"}},
+        y:{stacked:false,ticks:{font:{size:10}}}}
+    }
+  });
+
   ge("tb-ventas").innerHTML = f.map(v=>{
     const fechaDisp = (function(){
       if(!v.fecha) return "—";
@@ -1403,8 +1450,8 @@ function renderVentas(){
       +'<td style="font-size:11px">'+(v.acopio||"—")+'</td>'
       +'<td style="font-size:11px">'+(v.planta||"—")+'</td>'
       +'<td style="text-align:right;font-weight:700">'+fmt(v.cantidad,0)+'</td>'
-      +'<td style="text-align:right">'+(v.precio_ars?fmtP(v.precio_ars):"—")+'</td>'
-      +'<td style="text-align:right">'+(v.precio_usd?fmtU(v.precio_usd):"—")+'</td>'
+      +'<td style="text-align:right">'+(v.precio_ars?"$"+fmt(v.precio_ars,3):"—")+'</td>'
+      +'<td style="text-align:right">'+(v.precio_usd?"USD "+fmt(v.precio_usd,3):"—")+'</td>'
       +'<td style="text-align:right;font-weight:800;color:#1A3C2E">'+(v.total_ars?fmtP(v.total_ars):"—")+'</td>'
       +'<td style="text-align:right;font-weight:800;color:#1A4D7C">'+(v.total_usd?fmtU(v.total_usd):"—")+'</td>'
       +'<td><span class="badge '+(v.condicion==="DISPONIBLE"?"bg-verde":"bg-azul")+'" style="font-size:10px">'+(v.condicion||"—")+'</span></td>'
