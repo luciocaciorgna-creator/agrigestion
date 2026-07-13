@@ -82,6 +82,7 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
   <button class="tab" onclick="showPage('retiros_vs',this)">📊 Aportes Insumos</button>
   <button class="tab" onclick="showPage('cosecha',this)">🌾 Cosecha</button>
   <button class="tab" onclick="showPage('stockgrano',this)">🏭 Stock Grano</button>
+  <button class="tab" onclick="showPage('ventas',this)">💰 Ventas</button>
 </div>
 <div id="toast" class="toast"></div>
 
@@ -254,6 +255,38 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
   </div>
 </div>
 
+<!-- VENTAS -->
+<div id="page-ventas" class="page">
+  <div class="kpi-row" id="kpi-ventas"></div>
+  <div class="filters">
+    <div><label>Grano</label><select id="fv2-grano" onchange="renderVentas()"><option value="">Todos</option></select></div>
+    <div><label>Productor</label><select id="fv2-prod" onchange="renderVentas()"><option value="">Todos</option></select></div>
+    <div><label>Condición</label><select id="fv2-cond" onchange="renderVentas()"><option value="">Todas</option></select></div>
+    <button class="btn-cl" onclick="clrF(['fv2-grano','fv2-prod','fv2-cond'],renderVentas)">✕ Limpiar</button>
+  </div>
+  <div class="grid2" style="margin-bottom:14px">
+    <div class="card"><h3>Kg vendidos por grano</h3><div class="chart-wrap"><canvas id="ch-vt-grano"></canvas></div></div>
+    <div class="card"><h3>Kg vendidos por productor</h3><div class="chart-wrap"><canvas id="ch-vt-prod"></canvas></div></div>
+  </div>
+  <div class="card">
+    <h3>💰 Detalle de ventas</h3>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th onclick="sortTable('tb-ventas',0)" style="cursor:pointer">Fecha</th>
+      <th onclick="sortTable('tb-ventas',1)" style="cursor:pointer">Productor</th>
+      <th onclick="sortTable('tb-ventas',2)" style="cursor:pointer">Grano</th>
+      <th onclick="sortTable('tb-ventas',3)" style="cursor:pointer">Cosecha</th>
+      <th onclick="sortTable('tb-ventas',4)" style="cursor:pointer">Acopio</th>
+      <th onclick="sortTable('tb-ventas',5)" style="cursor:pointer">Planta/Puerto</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-ventas',6,true)">Cantidad (Kg)</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-ventas',7,true)">Precio $/Kg</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-ventas',8,true)">Precio U$D/Kg</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-ventas',9,true)">Total $</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-ventas',10,true)">Total U$D</th>
+      <th onclick="sortTable('tb-ventas',11)" style="cursor:pointer">Condición</th>
+    </tr></thead><tbody id="tb-ventas"></tbody></table></div>
+  </div>
+</div>
+
 <script>
 const SHEET_ID = "1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c";
 const PC = {"CACIORGNA HECTOR":"#1A3C2E","PELIZZA JAVIER":"#1A4D7C","SUCESION CACIORGNA RAUL":"#8B5E3C"};
@@ -310,7 +343,7 @@ function showPage(id,btn){
   const pageEl = ge("page-"+id);
   if(pageEl) pageEl.classList.add("active");
   if(btn) btn.classList.add("active");
-  const fns={stock:renderStock,compras:renderCompras,retiros:renderRetiros,labores:renderLabores,lotes:renderLotes,aportes:renderAportes,retiros_vs:renderRetirosVsAportes,cosecha:renderCosecha,stockgrano:renderStockGrano};
+  const fns={stock:renderStock,compras:renderCompras,retiros:renderRetiros,labores:renderLabores,lotes:renderLotes,aportes:renderAportes,retiros_vs:renderRetirosVsAportes,cosecha:renderCosecha,stockgrano:renderStockGrano,ventas:renderVentas};
   if(fns[id]) try{ fns[id](); } catch(e){ console.error("Error en "+id+":", e); }
 }
 
@@ -860,6 +893,7 @@ let COSECHA_DATA = [{"fecha": "2025-12-07", "campo": "FICARDI LOMA", "grano": "T
 let SILOBOLSAS_DATA = [];
 let EXTRACCIONES_DATA = [];
 let STOCKGRANO_ACOPIO = [];
+let VENTAS_DATA = [];
 
 let cosechaLotesSel = new Set();
 
@@ -1052,6 +1086,32 @@ function renderCosecha(){
       +'</tr>';
   }).join("") || '<tr><td colspan="13" style="text-align:center;color:#6b7280;padding:16px">Sin datos</td></tr>';
 
+  if(resRows.length){
+    const totKgCampoRes  = resRows.reduce((a,r)=>a+r.kg_campo,0);
+    const totDescargaRes = resRows.reduce((a,r)=>a+r.descarga,0);
+    const totMermaRes    = resRows.reduce((a,r)=>a+r.merma_tot,0);
+    const totNetosRes    = resRows.reduce((a,r)=>a+r.kg_netos,0);
+    const totViajesRes   = resRows.reduce((a,r)=>a+r.viajes,0);
+    // Total retirado por productor real, sumado a través de todas las filas mostradas
+    const totRetiradoProd = {};
+    resRows.forEach(r=>{
+      const retMap = realRetiradoMap[r.campo+"|"+r.grano]||{};
+      Object.keys(retMap).forEach(p=>{ totRetiradoProd[p]=(totRetiradoProd[p]||0)+retMap[p]; });
+    });
+    const prodTotalHtml = Object.entries(totRetiradoProd).sort((a,b)=>b[1]-a[1]).map(([p,kg])=>
+      '<div style="font-size:10px;white-space:nowrap"><span class="dot" style="background:'+(PC2[p]||"#ccc")+'"></span>'+p+': <strong>'+fmt(kg,0)+' kg</strong></div>'
+    ).join("") || "—";
+    ge("tb-cos-res").innerHTML += '<tr style="background:#F0DFA0;font-weight:800">'
+      +'<td colspan="2">TOTAL</td>'
+      +'<td style="text-align:right">'+fmt(totKgCampoRes,0)+'</td>'
+      +'<td style="text-align:right">'+fmt(totDescargaRes,0)+'</td>'
+      +'<td style="text-align:right;color:#DC2626">'+fmt(totMermaRes,0)+'</td>'
+      +'<td style="text-align:right;color:#1A3C2E">'+fmt(totNetosRes,0)+'</td>'
+      +'<td colspan="6">'+prodTotalHtml+'</td>'
+      +'<td style="text-align:right">'+totViajesRes+'</td>'
+      +'</tr>';
+  }
+
   // ── Detalle viajes ────────────────────────────────────────────────────────
   ge("tb-cos-det").innerHTML = f.map(c=>{
     // Format fecha from YYYY-MM-DD to DD/MM/YYYY for display
@@ -1080,6 +1140,27 @@ function renderCosecha(){
       +'<td style="text-align:right;font-weight:800;color:#1A3C2E">'+fmt(c.kg_netos,0)+'</td>'
       +'</tr>';
   }).join("") || '<tr><td colspan="13" style="text-align:center;color:#6b7280;padding:16px">Sin datos</td></tr>';
+
+  if(f.length){
+    const totRetiradoDet = {};
+    f.forEach(c=>{
+      const tit = PROD_NORM_COS[c.titular]||c.titular;
+      if(tit) totRetiradoDet[tit] = (totRetiradoDet[tit]||0) + c.kg_netos;
+    });
+    const prodTotalDetHtml = Object.entries(totRetiradoDet).sort((a,b)=>b[1]-a[1]).map(([p,kg])=>
+      '<div style="font-size:10px;white-space:nowrap"><span class="dot" style="background:'+(PC2[p]||"#ccc")+'"></span>'+p+': <strong>'+fmt(kg,0)+' kg</strong></div>'
+    ).join("") || "—";
+    ge("tb-cos-det").innerHTML += '<tr style="background:#F0DFA0;font-weight:800">'
+      +'<td colspan="3">TOTAL</td>'
+      +'<td colspan="4">'+prodTotalDetHtml+'</td>'
+      +'<td>—</td>'
+      +'<td style="text-align:right">'+fmt(totKgCampo,0)+'</td>'
+      +'<td style="text-align:right">'+fmt(totDescarga,0)+'</td>'
+      +'<td>—</td>'
+      +'<td style="text-align:right;color:#DC2626">'+fmt(totMerma,0)+'</td>'
+      +'<td style="text-align:right;color:#1A3C2E">'+fmt(totNetos,0)+'</td>'
+      +'</tr>';
+  }
 }
 
 
@@ -1185,6 +1266,7 @@ function renderStockGrano(){
   let acopioProdFiltered = STOCKGRANO_ACOPIO;
   if(fGrano) acopioProdFiltered = acopioProdFiltered.filter(r=>r.grano===fGrano);
   if(fProd)  acopioProdFiltered = acopioProdFiltered.filter(r=>r.productor===fProd);
+  acopioProdFiltered = acopioProdFiltered.filter(r=>r.entregado!==0);
   acopioProdFiltered = acopioProdFiltered.slice().sort((a,b)=>
     a.productor.localeCompare(b.productor)||a.acopio.localeCompare(b.acopio)||a.grano.localeCompare(b.grano));
 
@@ -1249,6 +1331,98 @@ function showExtracDetalle(silobolsa, grano){
   detail.scrollIntoView({behavior:"smooth"});
 }
 
+// ── VENTAS ────────────────────────────────────────────────────────────────────
+function renderVentas(){
+  const fGrano = ge("fv2-grano")?.value||"";
+  const fProd  = ge("fv2-prod")?.value||"";
+  const fCond  = ge("fv2-cond")?.value||"";
+
+  popSel("fv2-grano", VENTAS_DATA.map(v=>v.grano));
+  popSel("fv2-prod",  VENTAS_DATA.map(v=>v.productor));
+  popSel("fv2-cond",  VENTAS_DATA.map(v=>v.condicion));
+
+  const f = VENTAS_DATA.filter(v=>
+    (!fGrano||v.grano===fGrano) &&
+    (!fProd ||v.productor===fProd) &&
+    (!fCond ||v.condicion===fCond)
+  ).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+
+  const totKg  = f.reduce((a,v)=>a+v.cantidad,0);
+  const totArs = f.reduce((a,v)=>a+v.total_ars,0);
+  const totUsd = f.reduce((a,v)=>a+v.total_usd,0);
+
+  ge("kpi-ventas").innerHTML =
+    '<div class="kpi" style="border-color:#2D6A4F"><div class="val">'+f.length+'</div><div class="lbl">Ventas</div></div>'+
+    '<div class="kpi" style="border-color:#C9A84C"><div class="val">'+fmt(totKg/1000,1)+' tn</div><div class="lbl">Kg vendidos</div></div>'+
+    '<div class="kpi" style="border-color:#1A3C2E"><div class="val">'+fmtP(totArs)+'</div><div class="lbl">Total $</div></div>'+
+    '<div class="kpi" style="border-color:#1A4D7C"><div class="val">'+(totUsd>0?fmtU(totUsd):"—")+'</div><div class="lbl">Total U$D</div></div>';
+
+  const granoColMap = {TRIGO:"#C9A84C",SOJA:"#2D6A4F",MAIZ:"#E8A838","MAIZ FLINT":"#1A4D7C"};
+  const byGrano = {};
+  f.forEach(v=>{ byGrano[v.grano]=(byGrano[v.grano]||0)+v.cantidad; });
+  dC("ch-vt-grano");
+  charts["ch-vt-grano"] = new Chart(ge("ch-vt-grano"),{
+    type:"doughnut",
+    data:{
+      labels:Object.keys(byGrano).map(g=>g+" ("+fmt(byGrano[g]/1000,0)+" tn)"),
+      datasets:[{data:Object.values(byGrano).map(v=>v/1000),
+        backgroundColor:Object.keys(byGrano).map(g=>granoColMap[g]||"#888"),
+        borderWidth:2,borderColor:"#fff"}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:"bottom",labels:{font:{size:10}}}}}
+  });
+
+  const byProd = {};
+  f.forEach(v=>{ byProd[v.productor]=(byProd[v.productor]||0)+v.cantidad; });
+  dC("ch-vt-prod");
+  charts["ch-vt-prod"] = new Chart(ge("ch-vt-prod"),{
+    type:"bar",
+    data:{labels:Object.keys(byProd),datasets:[{
+      label:"Kg vendidos",data:Object.values(byProd).map(v=>v/1000),
+      backgroundColor:Object.keys(byProd).map(p=>PC[p]||"#888"),borderRadius:4
+    }]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>fmt(ctx.raw,1)+" tn"}}},
+      scales:{y:{grid:{color:"#eee"},ticks:{callback:v=>fmt(v,0)+" tn"}}}
+    }
+  });
+
+  ge("tb-ventas").innerHTML = f.map(v=>{
+    const fechaDisp = (function(){
+      if(!v.fecha) return "—";
+      var f2=v.fecha;
+      if(/^\d{4}-\d{2}-\d{2}/.test(f2)) return f2.substring(8,10)+"/"+f2.substring(5,7)+"/"+f2.substring(0,4);
+      return f2;
+    })();
+    return '<tr>'
+      +'<td>'+fechaDisp+'</td>'
+      +'<td style="font-size:11px"><span class="dot" style="background:'+(PC[v.productor]||"#ccc")+'"></span>'+v.productor+'</td>'
+      +'<td><span class="badge bg-trigo">'+v.grano+'</span></td>'
+      +'<td style="font-size:11px">'+(v.cosecha||"—")+'</td>'
+      +'<td style="font-size:11px">'+(v.acopio||"—")+'</td>'
+      +'<td style="font-size:11px">'+(v.planta||"—")+'</td>'
+      +'<td style="text-align:right;font-weight:700">'+fmt(v.cantidad,0)+'</td>'
+      +'<td style="text-align:right">'+(v.precio_ars?fmtP(v.precio_ars):"—")+'</td>'
+      +'<td style="text-align:right">'+(v.precio_usd?fmtU(v.precio_usd):"—")+'</td>'
+      +'<td style="text-align:right;font-weight:800;color:#1A3C2E">'+(v.total_ars?fmtP(v.total_ars):"—")+'</td>'
+      +'<td style="text-align:right;font-weight:800;color:#1A4D7C">'+(v.total_usd?fmtU(v.total_usd):"—")+'</td>'
+      +'<td><span class="badge '+(v.condicion==="DISPONIBLE"?"bg-verde":"bg-azul")+'" style="font-size:10px">'+(v.condicion||"—")+'</span></td>'
+      +'</tr>';
+  }).join("") || '<tr><td colspan="12" style="text-align:center;color:#6b7280;padding:16px">Sin datos — actualizá desde Google Sheets</td></tr>';
+
+  if(f.length){
+    ge("tb-ventas").innerHTML += '<tr style="background:#F0DFA0;font-weight:800">'
+      +'<td colspan="6">TOTAL</td>'
+      +'<td style="text-align:right">'+fmt(totKg,0)+'</td>'
+      +'<td>—</td><td>—</td>'
+      +'<td style="text-align:right;color:#1A3C2E">'+fmtP(totArs)+'</td>'
+      +'<td style="text-align:right;color:#1A4D7C">'+(totUsd>0?fmtU(totUsd):"—")+'</td>'
+      +'<td>—</td>'
+      +'</tr>';
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener("click", function(e){
   if(e.target.classList.contains("btn-extrac")){
@@ -1268,6 +1442,7 @@ const SHEET_URLS = {
   Stock:    "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=1133517722",
   Cosecha:  "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=1314127385",
   StockGrano: "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=2076937356",
+  Ventas: "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=240216627",
 };
 
 function parseCSV(text) {
@@ -1328,17 +1503,28 @@ function parseNum(val) {
   return parseFloat(clean) || 0;
 }
 
+// Parser específico para precios en formato argentino ($ / U$D por kg), donde la
+// coma SIEMPRE es el separador decimal (ej: "$430,000" -> 430, "$0,185" -> 0.185).
+function parsePrecioARS(val){
+  if(val===null||val===undefined) return 0;
+  let s = String(val).trim();
+  if(!s) return 0;
+  s = s.replace(/[$\s]/g,"").replace(/\./g,"").replace(",",".");
+  return parseFloat(s) || 0;
+}
+
 async function loadFromSheets() {
   showToast("⟳ Cargando datos de Google Sheets...");
   try {
     // Fetch all sheets in parallel
-    const [rawCompras, rawRetiros, rawLotes, rawLabores, rawCosecha, rawStockGrano] = await Promise.all([
+    const [rawCompras, rawRetiros, rawLotes, rawLabores, rawCosecha, rawStockGrano, rawVentas] = await Promise.all([
       fetch(SHEET_URLS.Compras).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Retiros).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Lotes).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Labores).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Cosecha).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.StockGrano).then(r=>r.text()).then(parseCSV),
+      fetch(SHEET_URLS.Ventas).then(r=>r.text()).then(parseCSV),
     ]);
 
     // Parse Compras - find header row dynamically
@@ -1697,7 +1883,39 @@ async function loadFromSheets() {
     DATA.compras=compras; DATA.retiros=retiros; DATA.lotes=lotes;
     DATA.labores=labores; DATA.stock=Object.values(sMap); DATA.convenios=convenios;
 
-    showToast(`✓ Actualizado: ${compras.length} compras · ${retiros.length} retiros · ${labores.length} labores · ${cosecha.length} cosecha`);
+    // Parse Ventas — encabezado: PRODUCTOR | FECHA | GRANO | COSECHA | ACOPIO |
+    // PLANTA/PUERTO | CANTIDAD (KG) | PRECIO ($/KG) | PRECIO (U$D/KG) | CONDICION
+    const ventas = [];
+    let ventasHeaderIdx = 0;
+    for(let i=0;i<Math.min(rawVentas.length,5);i++){
+      if(rawVentas[i][0]==="PRODUCTOR"){ ventasHeaderIdx=i+1; break; }
+    }
+    rawVentas.slice(ventasHeaderIdx).forEach(r=>{
+      const productor = String(r[0]||"").trim();
+      const grano = String(r[2]||"").trim();
+      if(!productor || !grano) return;
+      const cantidad = parseNum(r[6]);
+      const precioArs = parsePrecioARS(r[7]);
+      const precioUsd = parsePrecioARS(r[8]);
+      ventas.push({
+        productor,
+        fecha: (function(){
+          var v=String(r[1]||"").trim();
+          if(!v) return "";
+          var m=v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+          if(m) return m[3]+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0");
+          return v.substring(0,10);
+        })(),
+        grano, cosecha: String(r[3]||"").trim(), acopio: String(r[4]||"").trim(),
+        planta: String(r[5]||"").trim(), cantidad, precio_ars: precioArs, precio_usd: precioUsd,
+        total_ars: cantidad*precioArs, total_usd: cantidad*precioUsd,
+        condicion: String(r[9]||"").trim(),
+      });
+    });
+    VENTAS_DATA.length = 0;
+    ventas.forEach(v=>VENTAS_DATA.push(v));
+
+    showToast(`✓ Actualizado: ${compras.length} compras · ${retiros.length} retiros · ${labores.length} labores · ${cosecha.length} cosecha · ${ventas.length} ventas`);
     const activeTab=document.querySelector(".tab.active");
     if(activeTab) activeTab.click();
 
