@@ -9,6 +9,26 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:"Segoe UI",system-ui,sans-serif;background:#F0EBE1;color:#1a1a1a;min-height:100vh}
 .header{background:#1A3C2E;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,0.3)}
+.header-left{display:flex;align-items:center;gap:10px}
+.hamburger-btn{background:transparent;border:none;color:#fff;font-size:22px;line-height:1;cursor:pointer;padding:4px 9px;border-radius:6px;transition:background 0.15s}
+.hamburger-btn:hover{background:rgba(255,255,255,0.12)}
+.sidebar{position:fixed;top:0;left:0;height:100vh;width:240px;background:#1A3C2E;z-index:300;transform:translateX(-100%);transition:transform 0.25s ease;overflow-y:auto;box-shadow:2px 0 16px rgba(0,0,0,0.35)}
+.sidebar.open{transform:translateX(0)}
+.sidebar-head{padding:16px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,0.1)}
+.sidebar-head h1{color:#C9A84C;font-size:16px;font-weight:900}
+.sidebar-close{background:transparent;border:none;color:#fff;font-size:20px;cursor:pointer;padding:2px 8px;border-radius:6px}
+.sidebar-close:hover{background:rgba(255,255,255,0.12)}
+.sidebar .tab{display:block;width:100%;text-align:left;background:transparent;color:rgba(255,255,255,0.7);border:none;padding:13px 20px;cursor:pointer;font-size:13px;font-weight:700;border-radius:0;white-space:nowrap;transition:all 0.15s;border-left:4px solid transparent}
+.sidebar .tab.active{background:rgba(201,168,76,0.15);color:#C9A84C;border-left-color:#C9A84C}
+.sidebar .tab:hover{background:rgba(255,255,255,0.07)}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:250}
+.sidebar-overlay.open{display:block}
+@media(min-width:900px){
+  .sidebar{transform:translateX(0)}
+  .sidebar-overlay{display:none!important}
+  .sidebar-close{display:none}
+  body{padding-left:240px}
+}
 .header h1{color:#C9A84C;font-size:19px;font-weight:900}
 .header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .tc-badge{background:rgba(201,168,76,0.2);border:1px solid #C9A84C;color:#C9A84C;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer}
@@ -30,6 +50,19 @@ body{font-family:"Segoe UI",system-ui,sans-serif;background:#F0EBE1;color:#1a1a1
 table{width:100%;border-collapse:collapse;font-size:12px}
 thead tr{background:#1A3C2E}
 thead th{padding:9px 11px;color:#fff;text-align:left;font-weight:700;white-space:nowrap;font-size:11px}
+/* Scrollbar siempre visible en tablas anchas, para que se note que hay más columnas */
+div[style*="overflow-x"]{scrollbar-width:thin;scrollbar-color:#C9A84C #f0f0f0}
+div[style*="overflow-x"]::-webkit-scrollbar{height:9px}
+div[style*="overflow-x"]::-webkit-scrollbar-thumb{background:#C9A84C;border-radius:5px}
+div[style*="overflow-x"]::-webkit-scrollbar-track{background:#f0f0f0;border-radius:5px}
+/* Primeras 2 columnas fijas al scrollear horizontalmente en las tablas de Cosecha */
+#page-cosecha #tb-cos-res td:first-child,#page-cosecha #tb-cos-res td:nth-child(2),
+#page-cosecha table thead th:first-child,#page-cosecha table thead th:nth-child(2){position:sticky;z-index:3}
+#page-cosecha table thead th:first-child,#page-cosecha table thead th:nth-child(2){left:0;background:#1A3C2E}
+#page-cosecha table thead th:nth-child(2){left:64px}
+#page-cosecha #tb-cos-res td:first-child{left:0;background:#fff}
+#page-cosecha #tb-cos-res td:nth-child(2){left:64px;background:#fff}
+#page-cosecha #tb-cos-res tr:nth-child(even) td:first-child,#page-cosecha #tb-cos-res tr:nth-child(even) td:nth-child(2){background:#fafafa}
 tbody tr:nth-child(even){background:#F8F6F2}
 tbody tr:hover{background:#EEF7F2}
 tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
@@ -64,15 +97,22 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
 <body>
 
 <div class="header">
-  <div><h1>🌾 AgroGestión 26/27</h1></div>
+  <div class="header-left">
+    <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="Menú">☰</button>
+    <h1>🌾 AgroGestión 26/27</h1>
+  </div>
   <div class="header-right">
     <div class="tc-badge" id="tc-display" onclick="fetchTC()" title="Clic para actualizar TC">⟳ TC</div>
-    <button onclick="loadFromSheets()" style="background:#C9A84C;color:#1A3C2E;border:none;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:900">⟳ Actualizar datos</button>
     <button style="background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700" onclick="loadFromSheets()">⟳ Actualizar datos</button>
   </div>
 </div>
 
-<div class="tabs">
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-head">
+    <h1>🌾 Menú</h1>
+    <button class="sidebar-close" onclick="toggleSidebar()" aria-label="Cerrar menú">✕</button>
+  </div>
   <button class="tab active" onclick="showPage('stock',this)">📦 Stock</button>
   <button class="tab" onclick="showPage('compras',this)">🛒 Compras</button>
   <button class="tab" onclick="showPage('retiros',this)">↔ Retiros</button>
@@ -83,7 +123,7 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
   <button class="tab" onclick="showPage('cosecha',this)">🌾 Cosecha</button>
   <button class="tab" onclick="showPage('stockgrano',this)">🏭 Stock Grano</button>
   <button class="tab" onclick="showPage('ventas',this)">💰 Ventas</button>
-</div>
+</nav>
 <div id="toast" class="toast"></div>
 
 <!-- STOCK -->
@@ -207,6 +247,11 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
 <!-- STOCK GRANO -->
 <div id="page-stockgrano" class="page">
   <div class="kpi-row" id="kpi-sg"></div>
+  <div class="card" style="margin-bottom:14px" id="sg-alertas-card">
+    <h3>⚠️ Alertas de acopio (almacenaje libre / fijación)</h3>
+    <div id="sg-alertas" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px"></div>
+    <div id="sg-alertas-otras" style="margin-top:10px;font-size:11px;color:#6b7280"></div>
+  </div>
   <div class="filters">
     <div><label>Grano</label><select id="fsg-grano" onchange="renderStockGrano()"><option value="">Todos</option></select></div>
     <div><label>Productor</label><select id="fsg-prod" onchange="renderStockGrano()"><option value="">Todos</option></select></div>
@@ -341,12 +386,22 @@ function popSel(id,vals){
   });
   s.value=c;
 }
+function toggleSidebar(){
+  ge("sidebar").classList.toggle("open");
+  ge("sidebar-overlay").classList.toggle("open");
+}
+
 function showPage(id,btn){
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
   const pageEl = ge("page-"+id);
   if(pageEl) pageEl.classList.add("active");
   if(btn) btn.classList.add("active");
+  // Cierra el menú lateral al elegir una pestaña (en pantallas chicas)
+  if(window.innerWidth<900){
+    ge("sidebar").classList.remove("open");
+    ge("sidebar-overlay").classList.remove("open");
+  }
   const fns={stock:renderStock,compras:renderCompras,retiros:renderRetiros,labores:renderLabores,lotes:renderLotes,aportes:renderAportes,retiros_vs:renderRetirosVsAportes,cosecha:renderCosecha,stockgrano:renderStockGrano,ventas:renderVentas};
   if(fns[id]) try{ fns[id](); } catch(e){ console.error("Error en "+id+":", e); }
 }
@@ -898,6 +953,8 @@ let SILOBOLSAS_DATA = [];
 let EXTRACCIONES_DATA = [];
 let STOCKGRANO_ACOPIO = [];
 let VENTAS_DATA = [];
+let CONDICIONES_GENERAL = [];
+let CONDICIONES_GEA_DETALLE = [];
 
 let cosechaLotesSel = new Set();
 
@@ -1096,22 +1153,27 @@ function renderCosecha(){
     const totMermaRes    = resRows.reduce((a,r)=>a+r.merma_tot,0);
     const totNetosRes    = resRows.reduce((a,r)=>a+r.kg_netos,0);
     const totViajesRes   = resRows.reduce((a,r)=>a+r.viajes,0);
-    // Total retirado por productor real, sumado a través de todas las filas mostradas
-    const totRetiradoProd = {};
+    // Totales reales por columna P.1/P.2 (sumando cada fila mostrada)
+    let totTeo1=0, totReal1=0, totTeo2=0, totReal2=0;
     resRows.forEach(r=>{
+      const p1=r.prods[0], p2=r.prods[1];
       const retMap = realRetiradoMap[r.campo+"|"+r.grano]||{};
-      Object.keys(retMap).forEach(p=>{ totRetiradoProd[p]=(totRetiradoProd[p]||0)+retMap[p]; });
+      if(p1){ totTeo1 += p1.kg; totReal1 += Math.round(retMap[p1.prod]||0); }
+      if(p2){ totTeo2 += p2.kg; totReal2 += Math.round(retMap[p2.prod]||0); }
     });
-    const prodTotalHtml = Object.entries(totRetiradoProd).sort((a,b)=>b[1]-a[1]).map(([p,kg])=>
-      '<div style="font-size:10px;white-space:nowrap"><span class="dot" style="background:'+(PC2[p]||"#ccc")+'"></span>'+p+': <strong>'+fmt(kg,0)+' kg</strong></div>'
-    ).join("") || "—";
+    const totDif1 = totReal1-totTeo1, totDif2 = totReal2-totTeo2;
     ge("tb-cos-res").innerHTML += '<tr style="background:#F0DFA0;font-weight:800">'
       +'<td colspan="2">TOTAL</td>'
       +'<td style="text-align:right">'+fmt(totKgCampoRes,0)+'</td>'
       +'<td style="text-align:right">'+fmt(totDescargaRes,0)+'</td>'
       +'<td style="text-align:right;color:#DC2626">'+fmt(totMermaRes,0)+'</td>'
       +'<td style="text-align:right;color:#1A3C2E">'+fmt(totNetosRes,0)+'</td>'
-      +'<td colspan="6">'+prodTotalHtml+'</td>'
+      +'<td style="text-align:right;background:#DCEEE3">'+fmt(totTeo1,0)+'</td>'
+      +'<td style="text-align:right;background:#DCEEE3">'+fmt(totReal1,0)+'</td>'
+      +'<td style="text-align:right;background:#DCEEE3;color:'+(totDif1>=0?"#059669":"#DC2626")+'">'+(totDif1>=0?"+":"")+fmt(totDif1,0)+'</td>'
+      +'<td style="text-align:right;background:#DCE9F5">'+fmt(totTeo2,0)+'</td>'
+      +'<td style="text-align:right;background:#DCE9F5">'+fmt(totReal2,0)+'</td>'
+      +'<td style="text-align:right;background:#DCE9F5;color:'+(totDif2>=0?"#059669":"#DC2626")+'">'+(totDif2>=0?"+":"")+fmt(totDif2,0)+'</td>'
       +'<td style="text-align:right">'+totViajesRes+'</td>'
       +'</tr>';
   }
@@ -1170,9 +1232,69 @@ function renderCosecha(){
 
 
 // ── STOCK GRANO ───────────────────────────────────────────────────────────────
+// ── Alertas de condiciones de acopio (hoja "Condiciones 25-26") ────────────────
+function renderAlertasCondiciones(){
+  const cont = ge("sg-alertas");
+  const contOtras = ge("sg-alertas-otras");
+  if(!cont) return;
+
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const alerts = [];   // { origen, grano, campo, fechaIso, extra, dias }
+  const otras  = [];   // condiciones sin fecha fija (informativas)
+
+  CONDICIONES_GENERAL.forEach(c=>{
+    const alm = parseFechaCondicion(c.almacenaje_libre);
+    const fij = parseFechaCondicion(c.fecha_max_fijacion);
+    const origen = c.acopio+" · "+c.ubicacion;
+    if(alm.tipo==="fecha") alerts.push({origen, grano:c.grano, campo:"Almacenaje libre hasta", fechaIso:alm.iso,
+      extra:c.costo_almacenaje?("Costo almacenaje: "+c.costo_almacenaje):""});
+    else if(alm.tipo!=="ninguna") otras.push(origen+" · "+c.grano+": Almacenaje libre "+(alm.tipo==="dias"?alm.n+" días":alm.raw));
+    if(fij.tipo==="fecha") alerts.push({origen, grano:c.grano, campo:"Fecha máxima fijación", fechaIso:fij.iso, extra:""});
+    else if(fij.tipo!=="ninguna") otras.push(origen+" · "+c.grano+": Fijación "+(fij.tipo==="dias"?fij.n+" días":fij.raw));
+  });
+
+  CONDICIONES_GEA_DETALLE.forEach(c=>{
+    const alm = parseFechaCondicion(c.almacenaje_libre_hasta);
+    const origen = "GEA · "+c.productor;
+    if(alm.tipo==="fecha") alerts.push({origen, grano:c.grano, campo:"Almacenaje libre (partida)", fechaIso:alm.iso,
+      extra:fmt(c.kg,0)+" kg · cosecha "+c.campaña});
+    else if(alm.tipo!=="ninguna") otras.push(origen+" · "+c.grano+" (cosecha "+c.campaña+"): Almacenaje "+(alm.tipo==="dias"?alm.n+" días":alm.raw));
+  });
+
+  alerts.forEach(a=>{
+    a.dias = Math.round((new Date(a.fechaIso+"T00:00:00") - hoy)/86400000);
+  });
+  alerts.sort((a,b)=>a.dias-b.dias);
+
+  if(alerts.length===0){
+    cont.innerHTML = '<div style="color:#6b7280;font-size:12px;grid-column:1/-1">No hay fechas de almacenaje libre o fijación cargadas todavía.</div>';
+  } else {
+    cont.innerHTML = alerts.map(a=>{
+      const color = a.dias<=15 ? "#DC2626" : (a.dias<=30 ? "#C9A84C" : "#2D6A4F");
+      const bg    = a.dias<=15 ? "#FEF2F2" : (a.dias<=30 ? "#FFFBEB" : "#F0FDF4");
+      const fd = a.fechaIso.substring(8,10)+"/"+a.fechaIso.substring(5,7)+"/"+a.fechaIso.substring(0,4);
+      const diasTxt = a.dias<0 ? "Venció hace "+Math.abs(a.dias)+" días" : (a.dias===0 ? "Vence hoy" : "Faltan "+a.dias+" días");
+      return '<div style="background:'+bg+';border-left:4px solid '+color+';border-radius:8px;padding:10px 12px">'
+        +'<div style="font-size:10px;font-weight:800;color:'+color+'">'+diasTxt.toUpperCase()+'</div>'
+        +'<div style="font-size:12px;font-weight:800;color:#1A3C2E;margin-top:2px">'+a.origen+' · '+a.grano+'</div>'
+        +'<div style="font-size:11px;color:#374151;margin-top:1px">'+a.campo+': '+fd+'</div>'
+        +(a.extra?'<div style="font-size:10px;color:#6b7280;margin-top:2px">'+a.extra+'</div>':'')
+        +'</div>';
+    }).join("");
+  }
+
+  if(contOtras){
+    contOtras.innerHTML = otras.length
+      ? '<strong>Otras condiciones (sin fecha fija):</strong> '+otras.join(" · ")
+      : "";
+  }
+}
+
 function renderStockGrano(){
   const fGrano = ge("fsg-grano")?.value||"";
   const fProd  = ge("fsg-prod")?.value||"";
+
+  renderAlertasCondiciones();
 
   popSel("fsg-grano", [...new Set(COSECHA_DATA.map(c=>c.grano))]);
   popSel("fsg-prod",  [...new Set(COSECHA_DATA.filter(c=>c.titular).map(c=>c.titular))]);
@@ -1490,6 +1612,7 @@ const SHEET_URLS = {
   Cosecha:  "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=1314127385",
   StockGrano: "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=2076937356",
   Ventas: "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=240216627",
+  Condiciones: "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=481880400",
 };
 
 function parseCSV(text) {
@@ -1560,11 +1683,23 @@ function parsePrecioARS(val){
   return parseFloat(s) || 0;
 }
 
+// Interpreta valores de fechas/condiciones de la hoja "Condiciones 25-26": puede ser
+// una fecha (dd/mm/aaaa), un plazo relativo ("60 DIAS"), un guion (sin dato) o texto libre.
+function parseFechaCondicion(v){
+  v = String(v||"").trim();
+  if(!v || v==="-") return {tipo:"ninguna"};
+  let m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return {tipo:"fecha", iso: m[3]+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0")};
+  m = v.match(/^(\d+)\s*D[IÍ]AS/i);
+  if(m) return {tipo:"dias", n: parseInt(m[1],10)};
+  return {tipo:"texto", raw:v};
+}
+
 async function loadFromSheets() {
   showToast("⟳ Cargando datos de Google Sheets...");
   try {
     // Fetch all sheets in parallel
-    const [rawCompras, rawRetiros, rawLotes, rawLabores, rawCosecha, rawStockGrano, rawVentas] = await Promise.all([
+    const [rawCompras, rawRetiros, rawLotes, rawLabores, rawCosecha, rawStockGrano, rawVentas, rawCondiciones] = await Promise.all([
       fetch(SHEET_URLS.Compras).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Retiros).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Lotes).then(r=>r.text()).then(parseCSV),
@@ -1572,6 +1707,7 @@ async function loadFromSheets() {
       fetch(SHEET_URLS.Cosecha).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.StockGrano).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Ventas).then(r=>r.text()).then(parseCSV),
+      fetch(SHEET_URLS.Condiciones).then(r=>r.text()).then(parseCSV),
     ]);
 
     // Parse Compras - find header row dynamically
@@ -1962,7 +2098,50 @@ async function loadFromSheets() {
     VENTAS_DATA.length = 0;
     ventas.forEach(v=>VENTAS_DATA.push(v));
 
-    showToast(`✓ Actualizado: ${compras.length} compras · ${retiros.length} retiros · ${labores.length} labores · ${cosecha.length} cosecha · ${ventas.length} ventas`);
+    // Parse Condiciones 25-26: tablas izquierda (Planta/Puerto por Acopio+Grano) +
+    // 2 cuadros a la derecha específicos de GEA (uno por productor, detalle por partida)
+    const condGeneral = [];
+    const condGeaDetalle = [];
+    {
+      let ubicacion = null;
+      let geaProd = null;
+      rawCondiciones.forEach(r=>{
+        const c0 = String(r[0]||"").trim();
+        if(c0==="PLANTA") ubicacion="PLANTA";
+        else if(c0==="PUERTO") ubicacion="PUERTO";
+        else if(c0 && c0!=="ACOPIO" && ubicacion){
+          const grano = String(r[1]||"").trim();
+          if(grano){
+            condGeneral.push({
+              ubicacion, acopio:c0, grano,
+              almacenaje_libre: String(r[9]||"").trim(),
+              costo_almacenaje: String(r[10]||"").trim(),
+              fecha_max_fijacion: String(r[11]||"").trim(),
+            });
+          }
+        }
+        const c13 = String(r[13]||"").trim();
+        if(c13){
+          if(/CACIORGNA HECTOR/i.test(c13)) geaProd = "CACIORGNA HECTOR";
+          else if(/SUCESION/i.test(c13)) geaProd = "SUCESION CACIORGNA RAUL";
+          else if(c13==="GRANO"){ /* fila de encabezado, se ignora */ }
+          else if(geaProd){
+            condGeaDetalle.push({
+              productor: geaProd, grano: c13,
+              kg: parseNum(r[14]),
+              campaña: String(r[15]||"").trim(),
+              almacenaje_libre_hasta: String(r[16]||"").trim(),
+            });
+          }
+        }
+      });
+    }
+    CONDICIONES_GENERAL.length = 0;
+    condGeneral.forEach(c=>CONDICIONES_GENERAL.push(c));
+    CONDICIONES_GEA_DETALLE.length = 0;
+    condGeaDetalle.forEach(c=>CONDICIONES_GEA_DETALLE.push(c));
+
+    showToast(`✓ Actualizado: ${compras.length} compras · ${retiros.length} retiros · ${labores.length} labores · ${cosecha.length} cosecha · ${ventas.length} ventas · ${condGeneral.length+condGeaDetalle.length} condiciones`);
     const activeTab=document.querySelector(".tab.active");
     if(activeTab) activeTab.click();
 
