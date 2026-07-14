@@ -271,6 +271,10 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
 <!-- STOCK GRANO -->
 <div id="page-stockgrano" class="page">
   <div class="kpi-row" id="kpi-sg"></div>
+  <div class="card" style="margin-bottom:14px">
+    <h3>💵 Precios de Pizarra (BCR Rosario)</h3>
+    <div id="pizarra-box" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px"></div>
+  </div>
   <div class="filters">
     <div><label>Grano</label><select id="fsg-grano" onchange="renderStockGrano()"><option value="">Todos</option></select></div>
     <div><label>Productor</label><select id="fsg-prod" onchange="renderStockGrano()"><option value="">Todos</option></select></div>
@@ -1253,7 +1257,7 @@ function renderCosecha(){
       +'<td style="text-align:right;font-size:11px">'+(c.cp||"—")+'</td>'
       +'<td style="text-align:right">'+fmt(c.kg_campo,0)+'</td>'
       +'<td style="text-align:right">'+fmt(c.descarga,0)+'</td>'
-      +'<td style="text-align:right;font-size:11px">'+(c.hum_campo?fmt(c.hum_campo,1)+"%":"—")+'</td>'
+      +'<td style="text-align:right;font-size:11px">'+(c.hum_planta?fmt(c.hum_planta,1)+"%":"—")+'</td>'
       +'<td style="text-align:right;color:#DC2626">'+fmt(c.merma_tot,0)+'</td>'
       +'<td style="text-align:right;font-weight:800;color:#1A3C2E">'+fmt(c.kg_netos,0)+'</td>'
       +'</tr>';
@@ -1767,6 +1771,7 @@ document.addEventListener("click", function(e){
   }
 });
 if(window.innerWidth>=900) toggleSidebar(true);
+try{fetchPizarra();}catch(e){console.log("Pizarra fetch failed", e);}
 try{fetchTC();}catch(e){console.log("TC fetch failed",e);}
 
 // ── Cargar datos desde Google Sheets ─────────────────────────────────────────
@@ -1850,6 +1855,93 @@ function parsePrecioARS(val){
   if(!s) return 0;
   s = s.replace(/[$\s]/g,"").replace(/\./g,"").replace(",",".");
   return parseFloat(s) || 0;
+}
+
+// ── Precios de Pizarra (BCR - Cámara Arbitral de Cereales) ─────────────────────
+// La página de BCR no habilita CORS para pedidos desde otros dominios, así que se
+// intenta primero un fetch directo y, si falla, se usa un proxy público de sólo
+// lectura (allorigins.win) para poder leer el HTML igual desde el navegador.
+// La tendencia (sube/baja/igual) se calcula comparando el precio de hoy contra el
+// último precio que este mismo navegador vio guardado (no depende de iconos de la
+// página de BCR, que no se pueden leer de forma confiable vía scraping).
+const PIZARRA_URL = "https://www.cac.bcr.com.ar/es/precios-de-pizarra";
+const PIZARRA_GRANOS = [
+  {key:"trigo", label:"Trigo", re:"Trigo", color:"#C9A84C"},
+  {key:"maiz",  label:"Maíz",  re:"Ma[ií]z", color:"#E8A838"},
+  {key:"soja",  label:"Soja",  re:"Soja", color:"#2D6A4F"},
+];
+
+function trendPizarra(cur, prev){
+  if(prev===null||prev===undefined) return {icon:"–", color:"#9CA3AF", label:"sin dato previo"};
+  if(cur>prev)  return {icon:"▲", color:"#059669", label:"subiendo"};
+  if(cur<prev)  return {icon:"▼", color:"#DC2626", label:"bajando"};
+  return {icon:"=", color:"#9CA3AF", label:"sin cambios"};
+}
+
+function actualizarHistorialPizarra(fecha, freshData){
+  let hist = null;
+  try{ hist = JSON.parse(localStorage.getItem("pizarra_hist")||"null"); }catch(e){ hist = null; }
+  if(!hist){
+    localStorage.setItem("pizarra_hist", JSON.stringify({date:fecha, data:freshData}));
+    return null;
+  }
+  if(hist.date === fecha){
+    // Mismo día ya registrado: no hay nada nuevo, se mantiene el historial tal cual.
+    return hist.prevData || null;
+  }
+  localStorage.setItem("pizarra_hist", JSON.stringify({date:fecha, data:freshData, prevDate:hist.date, prevData:hist.data}));
+  return hist.data;
+}
+
+async function fetchPizarra(){
+  const box = ge("pizarra-box");
+  if(!box) return;
+  box.innerHTML = '<div style="font-size:11px;color:#6b7280;grid-column:1/-1">Actualizando precios de pizarra…</div>';
+
+  let html = null;
+  try{
+    const r = await fetch(PIZARRA_URL);
+    if(r.ok) html = await r.text();
+  }catch(e){ /* probablemente bloqueado por CORS, se intenta con proxy abajo */ }
+  if(!html){
+    try{
+      const r2 = await fetch("https://api.allorigins.win/raw?url="+encodeURIComponent(PIZARRA_URL));
+      if(r2.ok) html = await r2.text();
+    }catch(e){ console.log("Pizarra: fetch con proxy también falló", e); }
+  }
+  if(!html){
+    box.innerHTML = '<div style="font-size:11px;color:#DC2626;grid-column:1/-1">No se pudo obtener el precio de pizarra (bloqueado por CORS). '
+      +'<a href="'+PIZARRA_URL+'" target="_blank" style="color:#1A4D7C;font-weight:700">Ver en BCR ↗</a></div>';
+    return;
+  }
+
+  const clean = html.replace(/\s+/g," ");
+  const dateMatch = clean.match(/Precios Pizarra del d[ií]a\s*(\d{2}\/\d{2}\/\d{4})/i);
+  const fecha = dateMatch ? dateMatch[1] : new Date().toLocaleDateString("es-AR");
+
+  const freshData = {};
+  PIZARRA_GRANOS.forEach(g=>{
+    const re = new RegExp(g.re+"[\\s\\S]{0,400}?\\$\\s*([\\d.,]+)[\\s\\S]{0,250}?US\\$[^\\d]*([\\d.,]+)", "i");
+    const m = clean.match(re);
+    if(m) freshData[g.key] = { ars: parsePrecioARS(m[1]), usd: parsePrecioARS(m[2]) };
+  });
+
+  const prevData = actualizarHistorialPizarra(fecha, freshData);
+
+  box.innerHTML = PIZARRA_GRANOS.map(g=>{
+    const d = freshData[g.key];
+    if(!d){
+      return '<div style="background:#fff;border-left:4px solid #D1D5DB;border-radius:8px;padding:10px 14px"><div style="font-size:12px;color:#9CA3AF">'+g.label+': sin datos</div></div>';
+    }
+    const prev = prevData && prevData[g.key];
+    const tArs = trendPizarra(d.ars, prev?prev.ars:null);
+    return '<div style="background:#fff;border-left:4px solid '+g.color+';border-radius:8px;padding:10px 14px;box-shadow:0 1px 4px rgba(0,0,0,0.06)">'
+      +'<div style="font-size:12px;font-weight:800;color:#1A3C2E">'+g.label+'</div>'
+      +'<div style="font-size:17px;font-weight:900;color:#1A3C2E;margin-top:2px">$'+fmt(d.ars,0)+' <span style="font-size:10px;font-weight:600;color:#6b7280">/tn</span></div>'
+      +'<div style="font-size:12px;color:#374151">US$ '+fmt(d.usd,2)+' /tn</div>'
+      +'<div style="font-size:11px;font-weight:800;color:'+tArs.color+';margin-top:4px">'+tArs.icon+' '+tArs.label+'</div>'
+      +'</div>';
+  }).join("") + '<div style="grid-column:1/-1;font-size:10px;color:#9CA3AF;margin-top:2px">Fuente: BCR – Cámara Arbitral de Cereales · '+fecha+'. La tendencia compara contra el último precio visto en este navegador.</div>';
 }
 
 // Interpreta valores de fechas/condiciones de la hoja "Condiciones 25-26": puede ser
