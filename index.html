@@ -233,6 +233,7 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
     <div><label>Contratista</label><select id="fl-cont" onchange="renderLabores()"><option value="">Todos</option></select></div>
     <button class="btn-cl" onclick="clrF(['fl-lote','fl-tipo','fl-cont'],renderLabores)">✕</button>
   </div>
+  <p style="font-size:11px;color:#6b7280;margin:-6px 0 10px">Elegí un lote para ver sus labores una por una con los insumos ya abiertos. Sin elegir lote, se agrupan igual por lote pero con los insumos plegados.</p>
   <div class="card"><h3>Costo por lote — M.O. + Insumos (USD/ha)</h3><div class="chart-wrap"><canvas id="ch-lab"></canvas></div></div>
   <div class="card"><h3>Detalle de labores</h3><div id="div-labores"></div></div>
 </div>
@@ -292,14 +293,14 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
       <th onclick="sortTable('tb-sg-ac',1)" style="cursor:pointer">Acopio</th>
       <th onclick="sortTable('tb-sg-ac',2)" style="cursor:pointer">Grano</th>
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',3,true)">Kg Ent. Total</th>
-      <th style="text-align:right;cursor:pointer;background:#EEF7F2" onclick="sortTable('tb-sg-ac',4,true)">Kg Ent. Planta</th>
-      <th style="text-align:right;cursor:pointer;background:#EEF7F2" onclick="sortTable('tb-sg-ac',5,true)">Kg Ent. Puerto</th>
+      <th style="text-align:right;cursor:pointer;background:#EEF7F2;color:#1A3C2E" onclick="sortTable('tb-sg-ac',4,true)">Kg Ent. Planta</th>
+      <th style="text-align:right;cursor:pointer;background:#EEF7F2;color:#1A3C2E" onclick="sortTable('tb-sg-ac',5,true)">Kg Ent. Puerto</th>
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',6,true)">Kg Vend. Total</th>
-      <th style="text-align:right;cursor:pointer;background:#EEF7F0" onclick="sortTable('tb-sg-ac',7,true)">Kg Vend. Planta</th>
-      <th style="text-align:right;cursor:pointer;background:#EEF7F0" onclick="sortTable('tb-sg-ac',8,true)">Kg Vend. Puerto</th>
+      <th style="text-align:right;cursor:pointer;background:#EEF7F0;color:#1A3C2E" onclick="sortTable('tb-sg-ac',7,true)">Kg Vend. Planta</th>
+      <th style="text-align:right;cursor:pointer;background:#EEF7F0;color:#1A3C2E" onclick="sortTable('tb-sg-ac',8,true)">Kg Vend. Puerto</th>
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',9,true)">Stock Total</th>
-      <th style="text-align:right;cursor:pointer;background:#FBF3E0" onclick="sortTable('tb-sg-ac',10,true)">Stock Planta</th>
-      <th style="text-align:right;cursor:pointer;background:#FBF3E0" onclick="sortTable('tb-sg-ac',11,true)">Stock Puerto</th>
+      <th style="text-align:right;cursor:pointer;background:#FBF3E0;color:#1A3C2E" onclick="sortTable('tb-sg-ac',10,true)">Stock Planta</th>
+      <th style="text-align:right;cursor:pointer;background:#FBF3E0;color:#1A3C2E" onclick="sortTable('tb-sg-ac',11,true)">Stock Puerto</th>
       <th style="text-align:center">Alerta Planta</th>
       <th style="text-align:center">Alerta Puerto</th>
       <th style="text-align:center">Detalle</th>
@@ -738,12 +739,12 @@ function renderLabores(){
     }
   });
 
-  // Cards de labores
-  ge("div-labores").innerHTML = f.map((l,idx)=>{
+  // Cards de labores — si no hay un lote específico elegido, se agrupan visualmente
+  // por lote (con su propio encabezado) para no mezclar todo en una sola lista.
+  const buildLaborCard = (l, autoOpen)=>{
     const ha = getLoteHa(l.lote) || 1;
     const tc = l.tc || TC;
     const moUSD = l.precio_mo_ha ? l.precio_mo_ha/tc : 0;
-    const moTotalUSD = moUSD * ha;
     const insUSD = (Array.isArray(l.insumos)?l.insumos:[]).reduce((a,i)=>a+(i.cantidad||0)*(precioIns[i.nombre]||0),0);
     const insUSDha = insUSD / ha;
 
@@ -774,7 +775,7 @@ function renderLabores(){
           <td colspan="4">TOTAL INSUMOS</td>
           <td class="r">USD ${fmt(insUSD,0)}</td>
         </tr></tfoot>
-      </table>` : `<div style="font-size:11px;color:#6b7280;padding:6px">Sin insumos registrados</div>`;
+      </table>` : `<div style="font-size:11px;color:#6b7280;padding:6px">Sin insumos registrados para esta labor</div>`;
 
     return `<div class="labor-card">
       <div class="labor-header">
@@ -788,12 +789,35 @@ function renderLabores(){
           ${l.contratista?`<span style="font-size:11px;color:#6b7280">🚜 ${l.contratista}</span>`:""}
           ${l.precio_mo_ha?`<span style="font-size:12px;font-weight:700;color:#1A3C2E">M.O.: ${fmtP(l.precio_mo_ha)}/ha → <span style="color:#1A4D7C">USD ${fmt(moUSD,1)}/ha</span></span>`:""}
           ${insUSDha>0?`<span style="font-size:12px;font-weight:700;color:#8B5E3C">Ins.: USD ${fmt(insUSDha,1)}/ha</span>`:""}
-          ${(Array.isArray(l.insumos)?l.insumos:[]).length?`<button class="toggle-btn" onclick="toggleDet(this)">${l.insumos.length} insumo${l.insumos.length>1?"s":""} ▼</button>`:""}
+          <button class="toggle-btn" onclick="toggleDet(this)">${(Array.isArray(l.insumos)?l.insumos:[]).length||0} insumo${((l.insumos||[]).length!==1)?"s":""} ${autoOpen?"▲":"▼"}</button>
         </div>
       </div>
-      <div class="detail-panel">${insHtml}</div>
+      <div class="detail-panel" style="display:${autoOpen?"block":"none"}">${insHtml}</div>
     </div>`;
-  }).join("") || `<div style="color:#6b7280;text-align:center;padding:20px;font-size:13px">Sin labores para los filtros seleccionados</div>`;
+  };
+
+  if(lote){
+    // Un solo lote elegido: lista simple de sus labores, con insumos ya expandidos
+    // para que se vea cada labor con lo suyo por separado sin tener que ir clic a clic.
+    ge("div-labores").innerHTML = f.map(l=>buildLaborCard(l, true)).join("")
+      || `<div style="color:#6b7280;text-align:center;padding:20px;font-size:13px">Sin labores para los filtros seleccionados</div>`;
+  } else {
+    // Sin lote elegido: se agrupa por lote con un encabezado propio para cada uno,
+    // en vez de mezclar todas las labores de todos los lotes en una sola lista.
+    const porLote = {};
+    f.forEach(l=>{ (porLote[l.lote] = porLote[l.lote]||[]).push(l); });
+    const lotesOrdenados = Object.keys(porLote).sort();
+    ge("div-labores").innerHTML = lotesOrdenados.length ? lotesOrdenados.map(lt=>{
+      const labs = porLote[lt];
+      return `<div style="margin-bottom:18px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #C9A84C">
+          <span style="font-size:15px;font-weight:900;color:#1A3C2E">🗺️ ${lt}</span>
+          <span style="font-size:11px;color:#6b7280">${labs.length} labor${labs.length!==1?"es":""}</span>
+        </div>
+        ${labs.map(l=>buildLaborCard(l,false)).join("")}
+      </div>`;
+    }).join("") : `<div style="color:#6b7280;text-align:center;padding:20px;font-size:13px">Sin labores para los filtros seleccionados</div>`;
+  }
 }
 
 function toggleDet(btn){
@@ -1893,55 +1917,85 @@ function actualizarHistorialPizarra(fecha, freshData){
   return hist.data;
 }
 
+async function fetchConTimeout(url, ms){
+  const ctrl = new AbortController();
+  const t = setTimeout(()=>ctrl.abort(), ms);
+  try{
+    const r = await fetch(url, {signal: ctrl.signal});
+    clearTimeout(t);
+    if(!r.ok) return null;
+    const txt = await r.text();
+    return (txt && txt.length>200) ? txt : null;
+  }catch(e){
+    clearTimeout(t);
+    return null;
+  }
+}
+
 async function fetchPizarra(){
   const box = ge("pizarra-box");
   if(!box) return;
   box.innerHTML = '<div style="font-size:11px;color:#6b7280;grid-column:1/-1">Actualizando precios de pizarra…</div>';
 
-  let html = null;
   try{
-    const r = await fetch(PIZARRA_URL);
-    if(r.ok) html = await r.text();
-  }catch(e){ /* probablemente bloqueado por CORS, se intenta con proxy abajo */ }
-  if(!html){
-    try{
-      const r2 = await fetch("https://api.allorigins.win/raw?url="+encodeURIComponent(PIZARRA_URL));
-      if(r2.ok) html = await r2.text();
-    }catch(e){ console.log("Pizarra: fetch con proxy también falló", e); }
-  }
-  if(!html){
-    box.innerHTML = '<div style="font-size:11px;color:#DC2626;grid-column:1/-1">No se pudo obtener el precio de pizarra (bloqueado por CORS). '
-      +'<a href="'+PIZARRA_URL+'" target="_blank" style="color:#1A4D7C;font-weight:700">Ver en BCR ↗</a></div>';
-    return;
-  }
-
-  const clean = html.replace(/\s+/g," ");
-  const dateMatch = clean.match(/Precios Pizarra del d[ií]a\s*(\d{2}\/\d{2}\/\d{4})/i);
-  const fecha = dateMatch ? dateMatch[1] : new Date().toLocaleDateString("es-AR");
-
-  const freshData = {};
-  PIZARRA_GRANOS.forEach(g=>{
-    const re = new RegExp(g.re+"[\\s\\S]{0,400}?\\$\\s*([\\d.,]+)[\\s\\S]{0,250}?US\\$[^\\d]*([\\d.,]+)", "i");
-    const m = clean.match(re);
-    if(m) freshData[g.key] = { ars: parsePrecioARS(m[1]), usd: parsePrecioARS(m[2]) };
-  });
-
-  const prevData = actualizarHistorialPizarra(fecha, freshData);
-
-  box.innerHTML = PIZARRA_GRANOS.map(g=>{
-    const d = freshData[g.key];
-    if(!d){
-      return '<div style="background:#fff;border-left:4px solid #D1D5DB;border-radius:8px;padding:10px 14px"><div style="font-size:12px;color:#9CA3AF">'+g.label+': sin datos</div></div>';
+    // Se prueban varias vías en orden: directo, y si CORS lo bloquea, un par de
+    // proxies públicos de lectura. Cada intento tiene un límite de tiempo para
+    // que nunca quede colgado si alguno no responde.
+    const intentos = [
+      PIZARRA_URL,
+      "https://r.jina.ai/"+PIZARRA_URL,
+      "https://api.allorigins.win/raw?url="+encodeURIComponent(PIZARRA_URL),
+      "https://corsproxy.io/?url="+encodeURIComponent(PIZARRA_URL),
+    ];
+    let html = null;
+    for(const url of intentos){
+      html = await fetchConTimeout(url, 8000);
+      if(html) break;
     }
-    const prev = prevData && prevData[g.key];
-    const tArs = trendPizarra(d.ars, prev?prev.ars:null);
-    return '<div style="background:#fff;border-left:4px solid '+g.color+';border-radius:8px;padding:10px 14px;box-shadow:0 1px 4px rgba(0,0,0,0.06)">'
-      +'<div style="font-size:12px;font-weight:800;color:#1A3C2E">'+g.label+'</div>'
-      +'<div style="font-size:17px;font-weight:900;color:#1A3C2E;margin-top:2px">$'+fmt(d.ars,0)+' <span style="font-size:10px;font-weight:600;color:#6b7280">/tn</span></div>'
-      +'<div style="font-size:12px;color:#374151">US$ '+fmt(d.usd,2)+' /tn</div>'
-      +'<div style="font-size:11px;font-weight:800;color:'+tArs.color+';margin-top:4px">'+tArs.icon+' '+tArs.label+'</div>'
-      +'</div>';
+    if(!html){
+      box.innerHTML = '<div style="font-size:11px;color:#DC2626;grid-column:1/-1">No se pudo obtener el precio de pizarra en este momento. '
+        +'<a href="'+PIZARRA_URL+'" target="_blank" style="color:#1A4D7C;font-weight:700">Ver en BCR ↗</a></div>';
+      return;
+    }
+
+    const clean = html.replace(/\s+/g," ");
+    const dateMatch = clean.match(/Precios Pizarra del d[ií]a\s*(\d{2}\/\d{2}\/\d{4})/i);
+    const fecha = dateMatch ? dateMatch[1] : new Date().toLocaleDateString("es-AR");
+
+    const freshData = {};
+    PIZARRA_GRANOS.forEach(g=>{
+      const re = new RegExp(g.re+"[\\s\\S]{0,400}?\\$\\s*([\\d.,]+)[\\s\\S]{0,250}?US\\$[^\\d]*([\\d.,]+)", "i");
+      const m = clean.match(re);
+      if(m) freshData[g.key] = { ars: parsePrecioARS(m[1]), usd: parsePrecioARS(m[2]) };
+    });
+
+    if(Object.keys(freshData).length===0){
+      box.innerHTML = '<div style="font-size:11px;color:#DC2626;grid-column:1/-1">Se pudo acceder a BCR pero no se reconoció el formato de precios. '
+        +'<a href="'+PIZARRA_URL+'" target="_blank" style="color:#1A4D7C;font-weight:700">Ver en BCR ↗</a></div>';
+      return;
+    }
+
+    const prevData = actualizarHistorialPizarra(fecha, freshData);
+
+    box.innerHTML = PIZARRA_GRANOS.map(g=>{
+      const d = freshData[g.key];
+      if(!d){
+        return '<div style="background:#fff;border-left:4px solid #D1D5DB;border-radius:8px;padding:10px 14px"><div style="font-size:12px;color:#9CA3AF">'+g.label+': sin datos</div></div>';
+      }
+      const prev = prevData && prevData[g.key];
+      const tArs = trendPizarra(d.ars, prev?prev.ars:null);
+      return '<div style="background:#fff;border-left:4px solid '+g.color+';border-radius:8px;padding:10px 14px;box-shadow:0 1px 4px rgba(0,0,0,0.06)">'
+        +'<div style="font-size:12px;font-weight:800;color:#1A3C2E">'+g.label+'</div>'
+        +'<div style="font-size:17px;font-weight:900;color:#1A3C2E;margin-top:2px">$'+fmt(d.ars,0)+' <span style="font-size:10px;font-weight:600;color:#6b7280">/tn</span></div>'
+        +'<div style="font-size:12px;color:#374151">US$ '+fmt(d.usd,2)+' /tn</div>'
+        +'<div style="font-size:11px;font-weight:800;color:'+tArs.color+';margin-top:4px">'+tArs.icon+' '+tArs.label+'</div>'
+        +'</div>';
   }).join("") + '<div style="grid-column:1/-1;font-size:10px;color:#9CA3AF;margin-top:2px">Fuente: BCR – Cámara Arbitral de Cereales · '+fecha+'. La tendencia compara contra el último precio visto en este navegador.</div>';
+  }catch(err){
+    console.error("Pizarra: error inesperado", err);
+    box.innerHTML = '<div style="font-size:11px;color:#DC2626;grid-column:1/-1">Error al leer el precio de pizarra. '
+      +'<a href="'+PIZARRA_URL+'" target="_blank" style="color:#1A4D7C;font-weight:700">Ver en BCR ↗</a></div>';
+  }
 }
 
 // Interpreta valores de fechas/condiciones de la hoja "Condiciones 25-26": puede ser
