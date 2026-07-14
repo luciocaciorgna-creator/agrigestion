@@ -271,11 +271,6 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
 <!-- STOCK GRANO -->
 <div id="page-stockgrano" class="page">
   <div class="kpi-row" id="kpi-sg"></div>
-  <div class="card" style="margin-bottom:14px" id="sg-alertas-card">
-    <h3>⚠️ Alertas de acopio (almacenaje libre / fijación)</h3>
-    <div id="sg-alertas" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px"></div>
-    <div id="sg-alertas-otras" style="margin-top:10px;font-size:11px;color:#6b7280"></div>
-  </div>
   <div class="filters">
     <div><label>Grano</label><select id="fsg-grano" onchange="renderStockGrano()"><option value="">Todos</option></select></div>
     <div><label>Productor</label><select id="fsg-prod" onchange="renderStockGrano()"><option value="">Todos</option></select></div>
@@ -287,6 +282,7 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
   </div>
   <div class="card" style="margin-bottom:14px">
     <h3>🏭 Stock en Acopios por Productor</h3>
+    <p style="font-size:11px;color:#6b7280;margin-bottom:8px">Hacé clic en una fila para ver el detalle de condiciones de almacenaje.</p>
     <div style="overflow-x:auto"><table><thead><tr>
       <th onclick="sortTable('tb-sg-ac',0)" style="cursor:pointer">Productor</th>
       <th onclick="sortTable('tb-sg-ac',1)" style="cursor:pointer">Acopio</th>
@@ -296,11 +292,7 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',5,true)">Stock Actual</th>
       <th style="text-align:center">Alertas</th>
     </tr></thead><tbody id="tb-sg-ac"></tbody></table></div>
-    <!-- Detalle de condiciones/alertas de acopio -->
-    <div id="sg-cond-detail" style="display:none;margin-top:14px">
-      <h3 style="font-size:13px;font-weight:800;color:#1A3C2E;margin-bottom:8px">📋 Detalle de condiciones</h3>
-      <div id="sg-cond-detail-body"></div>
-    </div>
+
   </div>
   <div class="card">
     <h3>🌾 Stock en Silobolsas</h3>
@@ -336,16 +328,23 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
   <div class="filters">
     <div><label>Grano</label><select id="fv2-grano" onchange="renderVentas()"><option value="">Todos</option></select></div>
     <div><label>Productor</label><select id="fv2-prod" onchange="renderVentas()"><option value="">Todos</option></select></div>
+    <div><label>Acopio</label><select id="fv2-acopio" onchange="renderVentas()"><option value="">Todos</option></select></div>
     <div><label>Condición</label><select id="fv2-cond" onchange="renderVentas()"><option value="">Todas</option></select></div>
-    <button class="btn-cl" onclick="clrF(['fv2-grano','fv2-prod','fv2-cond'],renderVentas)">✕ Limpiar</button>
+    <button class="btn-cl" onclick="clrF(['fv2-grano','fv2-prod','fv2-acopio','fv2-cond'],renderVentas)">✕ Limpiar</button>
   </div>
   <div class="grid2" style="margin-bottom:14px">
     <div class="card"><h3>Kg vendidos por grano</h3><div class="chart-wrap"><canvas id="ch-vt-grano"></canvas></div></div>
     <div class="card"><h3>Kg vendidos por productor</h3><div class="chart-wrap"><canvas id="ch-vt-prod"></canvas></div></div>
   </div>
-  <div class="card" style="margin-bottom:14px">
-    <h3>Kg vendidos vs Kg restantes por vender (Productor · Acopio · Grano)</h3>
-    <div style="position:relative" id="ch-vt-comp-wrap"><canvas id="ch-vt-comp"></canvas></div>
+  <div class="grid2" style="margin-bottom:14px">
+    <div class="card">
+      <h3>Kg vendidos vs Kg restantes — CACIORGNA HECTOR (Acopio · Grano)</h3>
+      <div style="position:relative" id="ch-vt-comp-h-wrap"><canvas id="ch-vt-comp-h"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Kg vendidos vs Kg restantes — SUCESION CACIORGNA RAUL (Acopio · Grano)</h3>
+      <div style="position:relative" id="ch-vt-comp-s-wrap"><canvas id="ch-vt-comp-s"></canvas></div>
+    </div>
   </div>
   <div class="card">
     <h3>💰 Detalle de ventas</h3>
@@ -1072,21 +1071,22 @@ function renderCosecha(){
     }
   });
 
-  // ── Chart: Rinde neto (kg/ha) por campo, coloreado por cultivo ───────────
+  // ── Chart: Rinde neto (kg/ha) por campo y grano (diferenciado si un lote tuvo más de un cultivo) ──
   const byRinde = {};
   f.forEach(c=>{
-    if(!byRinde[c.campo]) byRinde[c.campo]={kg:0,ha:c.ha,grano:c.grano};
-    byRinde[c.campo].kg += c.kg_netos;
+    const k = c.campo+"|"+c.grano;
+    if(!byRinde[k]) byRinde[k]={campo:c.campo, grano:c.grano, kg:0, ha:c.ha};
+    byRinde[k].kg += c.kg_netos;
   });
-  const rindeData = Object.entries(byRinde)
-    .filter(([,v])=>v.ha>0)
-    .map(([k,v])=>({campo:k, rinde:v.kg/v.ha, grano:v.grano}))
+  const rindeData = Object.values(byRinde)
+    .filter(v=>v.ha>0)
+    .map(v=>({campo:v.campo, grano:v.grano, rinde:v.kg/v.ha}))
     .sort((a,b)=>b.rinde-a.rinde);
   const granoColMap = {TRIGO:"#C9A84C",SOJA:"#2D6A4F",MAIZ:"#E8A838","MAIZ FLINT":"#1A4D7C"};
   dC("ch-cos-rinde");
   charts["ch-cos-rinde"] = new Chart(ge("ch-cos-rinde"),{
     type:"bar",
-    data:{labels:rindeData.map(x=>x.campo),datasets:[{
+    data:{labels:rindeData.map(x=>x.campo+" · "+x.grano),datasets:[{
       label:"kg/ha",
       data:rindeData.map(x=>parseFloat(x.rinde.toFixed(0))),
       backgroundColor:rindeData.map(x=>granoColMap[x.grano]||"#888"),
@@ -1299,15 +1299,59 @@ function diasMasProximo(generales, geaDet){
   return min;
 }
 
-function showCondicionDetalle(acopio, grano, productor){
-  const panel = ge("sg-cond-detail");
-  const body  = ge("sg-cond-detail-body");
-  if(!panel||!body) return;
+function toggleCondRow(btn){
+  const row = btn.closest("tr");
+  const next = row.nextElementSibling;
+  if(next && next.classList.contains("cond-detail-row")){
+    next.remove();
+    return;
+  }
+  document.querySelectorAll("#tb-sg-ac .cond-detail-row").forEach(el=>el.remove());
+  const acopio = btn.dataset.acopio, grano = btn.dataset.grano, productor = btn.dataset.productor;
+  const stockActual = parseFloat(btn.dataset.stock)||0;
+  const stockPlanta = parseFloat(btn.dataset.planta)||0;
+  const stockPuerto = parseFloat(btn.dataset.puerto)||0;
+  const html = buildCondDetalleHtml(acopio, grano, productor, stockActual, stockPlanta, stockPuerto);
+  row.insertAdjacentHTML("afterend", '<tr class="cond-detail-row"><td colspan="7" style="background:#FAFAF8;padding:12px 16px;border-left:3px solid #C9A84C">'+html+'</td></tr>');
+}
+
+function buildCondDetalleHtml(acopio, grano, productor, stockActual, stockPlanta, stockPuerto){
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
   const generales = CONDICIONES_GENERAL.filter(c=>c.acopio===acopio && c.grano===grano);
   const geaDet = acopio==="GEA" ? CONDICIONES_GEA_DETALLE.filter(c=>c.productor===productor && c.grano===grano) : [];
-  if(generales.length===0 && geaDet.length===0){ panel.style.display="none"; return; }
+
+  if(generales.length===0 && geaDet.length===0){
+    return '<div style="font-size:12px;color:#6b7280">No hay condiciones de almacenaje cargadas en "Condiciones 25-26" para '+acopio+' · '+grano+'.</div>';
+  }
 
   let html = '<div style="font-size:11px;font-weight:700;color:#6b7280;margin-bottom:8px">'+acopio+' · '+grano+(productor?' · '+productor:'')+'</div>';
+
+  // ── Diferenciación de kg que pagan almacenaje vs los que están libres ──
+  if(geaDet.length){
+    let kgLibre=0, kgPaga=0;
+    geaDet.forEach(c=>{
+      const p = parseFechaCondicion(c.almacenaje_libre_hasta);
+      const paga = p.tipo==="fecha" && new Date(p.iso+"T00:00:00")<hoy;
+      if(paga) kgPaga+=c.kg; else kgLibre+=c.kg;
+    });
+    html += renderKgSplit(kgLibre, kgPaga, 0);
+  } else if(generales.length){
+    // Sin detalle por partida (no es GEA con desglose): se estima con el split Planta/Puerto del stock actual
+    let kgLibre=0, kgPaga=0, kgSinDato=0;
+    generales.forEach(c=>{
+      const kgUbic = c.ubicacion==="PLANTA" ? stockPlanta : stockPuerto;
+      if(!kgUbic) return;
+      const p = parseFechaCondicion(c.almacenaje_libre);
+      if(p.tipo==="fecha"){
+        if(new Date(p.iso+"T00:00:00")<hoy) kgPaga+=kgUbic; else kgLibre+=kgUbic;
+      } else {
+        kgSinDato += kgUbic;
+      }
+    });
+    const kgAsignado = kgLibre+kgPaga+kgSinDato;
+    if(kgAsignado < stockActual-1) kgSinDato += (stockActual-kgAsignado);
+    html += renderKgSplit(kgLibre, kgPaga, kgSinDato);
+  }
 
   if(generales.length){
     html += '<div style="overflow-x:auto"><table style="margin-bottom:'+(geaDet.length?'12px':'0')+'"><thead><tr>'
@@ -1323,85 +1367,36 @@ function showCondicionDetalle(acopio, grano, productor){
   }
   if(geaDet.length){
     html += '<div style="overflow-x:auto"><table><thead><tr>'
-      +'<th>Grano</th><th>Kg</th><th>Cosecha</th><th>Almacenaje libre hasta</th>'
+      +'<th>Grano</th><th>Kg</th><th>Cosecha</th><th>Almacenaje libre hasta</th><th>Estado</th>'
       +'</tr></thead><tbody>'
-      +geaDet.map(c=>'<tr>'
-        +'<td>'+c.grano+'</td>'
-        +'<td style="text-align:right">'+fmt(c.kg,0)+'</td>'
-        +'<td>'+(c.campaña||"—")+'</td>'
-        +'<td>'+(c.almacenaje_libre_hasta||"—")+'</td>'
-        +'</tr>').join("")
+      +geaDet.map(c=>{
+        const p = parseFechaCondicion(c.almacenaje_libre_hasta);
+        const paga = p.tipo==="fecha" && new Date(p.iso+"T00:00:00")<hoy;
+        return '<tr>'
+          +'<td>'+c.grano+'</td>'
+          +'<td style="text-align:right">'+fmt(c.kg,0)+'</td>'
+          +'<td>'+(c.campaña||"—")+'</td>'
+          +'<td>'+(c.almacenaje_libre_hasta||"—")+'</td>'
+          +'<td>'+(p.tipo==="fecha" ? (paga?'<span style="color:#DC2626;font-weight:700">Paga almacenaje</span>':'<span style="color:#2D6A4F;font-weight:700">Libre</span>') : '<span style="color:#9CA3AF">—</span>')+'</td>'
+          +'</tr>';
+      }).join("")
       +'</tbody></table></div>';
   }
-  body.innerHTML = html;
-  panel.style.display = "block";
-  panel.scrollIntoView({behavior:"smooth", block:"nearest"});
+  return html;
 }
 
-
-// ── Alertas de condiciones de acopio (hoja "Condiciones 25-26") ────────────────
-function renderAlertasCondiciones(){
-  const cont = ge("sg-alertas");
-  const contOtras = ge("sg-alertas-otras");
-  if(!cont) return;
-
-  const hoy = new Date(); hoy.setHours(0,0,0,0);
-  const alerts = [];   // { origen, grano, campo, fechaIso, extra, dias }
-  const otras  = [];   // condiciones sin fecha fija (informativas)
-
-  CONDICIONES_GENERAL.forEach(c=>{
-    const alm = parseFechaCondicion(c.almacenaje_libre);
-    const fij = parseFechaCondicion(c.fecha_max_fijacion);
-    const origen = c.acopio+" · "+c.ubicacion;
-    if(alm.tipo==="fecha") alerts.push({origen, grano:c.grano, campo:"Almacenaje libre hasta", fechaIso:alm.iso,
-      extra:c.costo_almacenaje?("Costo almacenaje: "+c.costo_almacenaje):""});
-    else if(alm.tipo!=="ninguna") otras.push(origen+" · "+c.grano+": Almacenaje libre "+(alm.tipo==="dias"?alm.n+" días":alm.raw));
-    if(fij.tipo==="fecha") alerts.push({origen, grano:c.grano, campo:"Fecha máxima fijación", fechaIso:fij.iso, extra:""});
-    else if(fij.tipo!=="ninguna") otras.push(origen+" · "+c.grano+": Fijación "+(fij.tipo==="dias"?fij.n+" días":fij.raw));
-  });
-
-  CONDICIONES_GEA_DETALLE.forEach(c=>{
-    const alm = parseFechaCondicion(c.almacenaje_libre_hasta);
-    const origen = "GEA · "+c.productor;
-    if(alm.tipo==="fecha") alerts.push({origen, grano:c.grano, campo:"Almacenaje libre (partida)", fechaIso:alm.iso,
-      extra:fmt(c.kg,0)+" kg · cosecha "+c.campaña});
-    else if(alm.tipo!=="ninguna") otras.push(origen+" · "+c.grano+" (cosecha "+c.campaña+"): Almacenaje "+(alm.tipo==="dias"?alm.n+" días":alm.raw));
-  });
-
-  alerts.forEach(a=>{
-    a.dias = Math.round((new Date(a.fechaIso+"T00:00:00") - hoy)/86400000);
-  });
-  alerts.sort((a,b)=>a.dias-b.dias);
-
-  if(alerts.length===0){
-    cont.innerHTML = '<div style="color:#6b7280;font-size:12px;grid-column:1/-1">No hay fechas de almacenaje libre o fijación cargadas todavía.</div>';
-  } else {
-    cont.innerHTML = alerts.map(a=>{
-      const color = a.dias<=15 ? "#DC2626" : (a.dias<=30 ? "#C9A84C" : "#2D6A4F");
-      const bg    = a.dias<=15 ? "#FEF2F2" : (a.dias<=30 ? "#FFFBEB" : "#F0FDF4");
-      const fd = a.fechaIso.substring(8,10)+"/"+a.fechaIso.substring(5,7)+"/"+a.fechaIso.substring(0,4);
-      const diasTxt = a.dias<0 ? "Venció hace "+Math.abs(a.dias)+" días" : (a.dias===0 ? "Vence hoy" : "Faltan "+a.dias+" días");
-      return '<div style="background:'+bg+';border-left:4px solid '+color+';border-radius:8px;padding:10px 12px">'
-        +'<div style="font-size:10px;font-weight:800;color:'+color+'">'+diasTxt.toUpperCase()+'</div>'
-        +'<div style="font-size:12px;font-weight:800;color:#1A3C2E;margin-top:2px">'+a.origen+' · '+a.grano+'</div>'
-        +'<div style="font-size:11px;color:#374151;margin-top:1px">'+a.campo+': '+fd+'</div>'
-        +(a.extra?'<div style="font-size:10px;color:#6b7280;margin-top:2px">'+a.extra+'</div>':'')
-        +'</div>';
-    }).join("");
-  }
-
-  if(contOtras){
-    contOtras.innerHTML = otras.length
-      ? '<strong>Otras condiciones (sin fecha fija):</strong> '+otras.join(" · ")
-      : "";
-  }
+function renderKgSplit(kgLibre, kgPaga, kgSinDato){
+  const chips = [];
+  if(kgLibre>0)   chips.push('<div style="background:#F0FDF4;border-left:4px solid #2D6A4F;border-radius:6px;padding:6px 10px;font-size:11px"><strong>'+fmt(kgLibre,0)+' kg</strong><br>en almacenaje libre</div>');
+  if(kgPaga>0)    chips.push('<div style="background:#FEF2F2;border-left:4px solid #DC2626;border-radius:6px;padding:6px 10px;font-size:11px"><strong>'+fmt(kgPaga,0)+' kg</strong><br>pagando almacenaje</div>');
+  if(kgSinDato>0) chips.push('<div style="background:#F3F4F6;border-left:4px solid #9CA3AF;border-radius:6px;padding:6px 10px;font-size:11px"><strong>'+fmt(kgSinDato,0)+' kg</strong><br>sin fecha definida</div>');
+  if(chips.length===0) return "";
+  return '<div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">'+chips.join("")+'</div>';
 }
 
 function renderStockGrano(){
   const fGrano = ge("fsg-grano")?.value||"";
   const fProd  = ge("fsg-prod")?.value||"";
-
-  renderAlertasCondiciones();
 
   popSel("fsg-grano", [...new Set(COSECHA_DATA.map(c=>c.grano))]);
   popSel("fsg-prod",  [...new Set(COSECHA_DATA.filter(c=>c.titular).map(c=>c.titular))]);
@@ -1520,7 +1515,7 @@ function renderStockGrano(){
       +'<td style="text-align:right;font-weight:800;color:#1A3C2E">'+fmt(r.stock_actual,0)+' kg</td>'
       +'<td style="text-align:center">'
       +(hasCond
-        ? '<button class="btn-cond" data-acopio="'+r.acopio+'" data-grano="'+r.grano+'" data-productor="'+r.productor+'" style="background:'+dColor+'22;border:1.5px solid '+dColor+';color:'+dColor+';border-radius:12px;padding:3px 10px;font-size:10px;font-weight:800;cursor:pointer">'+dLabel+'</button>'
+        ? '<button class="btn-cond" onclick="toggleCondRow(this)" data-acopio="'+r.acopio+'" data-grano="'+r.grano+'" data-productor="'+r.productor+'" data-stock="'+r.stock_actual+'" data-planta="'+(r.stock_planta||0)+'" data-puerto="'+(r.stock_puerto||0)+'" style="background:'+dColor+'22;border:1.5px solid '+dColor+';color:'+dColor+';border-radius:12px;padding:3px 10px;font-size:10px;font-weight:800;cursor:pointer">'+dLabel+'</button>'
         : '<span style="color:#D1D5DB;font-size:11px">—</span>')
       +'</td>'
       +'</tr>';
@@ -1577,18 +1572,21 @@ function showExtracDetalle(silobolsa, grano){
 
 // ── VENTAS ────────────────────────────────────────────────────────────────────
 function renderVentas(){
-  const fGrano = ge("fv2-grano")?.value||"";
-  const fProd  = ge("fv2-prod")?.value||"";
-  const fCond  = ge("fv2-cond")?.value||"";
+  const fGrano  = ge("fv2-grano")?.value||"";
+  const fProd   = ge("fv2-prod")?.value||"";
+  const fAcopio = ge("fv2-acopio")?.value||"";
+  const fCond   = ge("fv2-cond")?.value||"";
 
-  popSel("fv2-grano", VENTAS_DATA.map(v=>v.grano));
-  popSel("fv2-prod",  VENTAS_DATA.map(v=>v.productor));
-  popSel("fv2-cond",  VENTAS_DATA.map(v=>v.condicion));
+  popSel("fv2-grano",  VENTAS_DATA.map(v=>v.grano));
+  popSel("fv2-prod",   VENTAS_DATA.map(v=>v.productor));
+  popSel("fv2-acopio", VENTAS_DATA.map(v=>v.acopio));
+  popSel("fv2-cond",   VENTAS_DATA.map(v=>v.condicion));
 
   const f = VENTAS_DATA.filter(v=>
-    (!fGrano||v.grano===fGrano) &&
-    (!fProd ||v.productor===fProd) &&
-    (!fCond ||v.condicion===fCond)
+    (!fGrano ||v.grano===fGrano) &&
+    (!fProd  ||v.productor===fProd) &&
+    (!fAcopio||v.acopio===fAcopio) &&
+    (!fCond  ||v.condicion===fCond)
   ).sort((a,b)=>b.fecha.localeCompare(a.fecha));
 
   const totKg  = f.reduce((a,v)=>a+v.cantidad,0);
@@ -1632,9 +1630,9 @@ function renderVentas(){
     }
   });
 
-  // ── Comparativo: Kg vendidos vs Kg restantes por vender ──────────────────
+  // ── Comparativo: Kg vendidos vs Kg restantes por vender (uno por productor) ─
   // "Restante por vender" = Stock Actual de la hoja "Stock Grano" (Entregado - Vendido),
-  // cruzado por Productor · Acopio · Grano contra lo efectivamente vendido en esta hoja.
+  // cruzado por Acopio · Grano contra lo efectivamente vendido en esta hoja.
   const vendidoMap = {};
   f.forEach(v=>{
     const k = v.productor+"|"+v.acopio+"|"+v.grano;
@@ -1642,38 +1640,43 @@ function renderVentas(){
   });
   const restanteMap = {};
   STOCKGRANO_ACOPIO.forEach(r=>{
-    if(fGrano && r.grano!==fGrano) return;
-    if(fProd  && r.productor!==fProd) return;
+    if(fGrano  && r.grano!==fGrano) return;
+    if(fAcopio && r.acopio!==fAcopio) return;
     const k = r.productor+"|"+r.acopio+"|"+r.grano;
     restanteMap[k] = (restanteMap[k]||0) + r.stock_actual;
   });
   const compKeys = new Set([...Object.keys(vendidoMap), ...Object.keys(restanteMap)]);
-  const compRows = [...compKeys].map(k=>{
+  const compAll = [...compKeys].map(k=>{
     const [productor,acopio,grano] = k.split("|");
     return { productor, acopio, grano, vendido: vendidoMap[k]||0, restante: restanteMap[k]||0 };
-  }).filter(r=>r.vendido>0 || r.restante>0)
-    .sort((a,b)=>(b.vendido+b.restante)-(a.vendido+a.restante));
+  }).filter(r=>r.vendido>0 || r.restante>0);
 
-  const compWrap = ge("ch-vt-comp-wrap");
-  if(compWrap) compWrap.style.height = Math.max(220, 46+compRows.length*30)+"px";
-  dC("ch-vt-comp");
-  charts["ch-vt-comp"] = new Chart(ge("ch-vt-comp"),{
-    type:"bar",
-    data:{
-      labels: compRows.map(r=>(r.productor.split(" ")[0]==="SUCESION"?"SUCESION":r.productor.split(" ")[0])+" · "+r.acopio+" · "+r.grano),
-      datasets:[
-        { label:"Vendido", data:compRows.map(r=>r.vendido/1000), backgroundColor:"#2D6A4F", borderRadius:3 },
-        { label:"Restante por vender", data:compRows.map(r=>r.restante/1000), backgroundColor:"#C9A84C", borderRadius:3 }
-      ]
-    },
-    options:{
-      indexAxis:"y", responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{position:"bottom",labels:{font:{size:10}}},
-        tooltip:{callbacks:{label:ctx=>ctx.dataset.label+": "+fmt(ctx.raw,1)+" tn"}}},
-      scales:{x:{stacked:false,grid:{color:"#eee"},ticks:{callback:v=>fmt(v,0)+" tn"}},
-        y:{stacked:false,ticks:{font:{size:10}}}}
-    }
-  });
+  function buildComparativoChart(canvasId, wrapId, productorNombre){
+    const rows = compAll.filter(r=>r.productor===productorNombre)
+      .sort((a,b)=>(b.vendido+b.restante)-(a.vendido+a.restante));
+    const wrap = ge(wrapId);
+    if(wrap) wrap.style.height = Math.max(200, 46+rows.length*30)+"px";
+    dC(canvasId);
+    charts[canvasId] = new Chart(ge(canvasId),{
+      type:"bar",
+      data:{
+        labels: rows.map(r=>r.acopio+" · "+r.grano),
+        datasets:[
+          { label:"Vendido", data:rows.map(r=>r.vendido/1000), backgroundColor:"#2D6A4F", borderRadius:3 },
+          { label:"Restante por vender", data:rows.map(r=>r.restante/1000), backgroundColor:"#C9A84C", borderRadius:3 }
+        ]
+      },
+      options:{
+        indexAxis:"y", responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{position:"bottom",labels:{font:{size:10}}},
+          tooltip:{callbacks:{label:ctx=>ctx.dataset.label+": "+fmt(ctx.raw,1)+" tn"}}},
+        scales:{x:{stacked:false,grid:{color:"#eee"},ticks:{callback:v=>fmt(v,0)+" tn"}},
+          y:{stacked:false,ticks:{font:{size:10}}}}
+      }
+    });
+  }
+  buildComparativoChart("ch-vt-comp-h","ch-vt-comp-h-wrap","CACIORGNA HECTOR");
+  buildComparativoChart("ch-vt-comp-s","ch-vt-comp-s-wrap","SUCESION CACIORGNA RAUL");
 
   ge("tb-ventas").innerHTML = f.map(v=>{
     const fechaDisp = (function(){
@@ -1714,9 +1717,6 @@ function renderVentas(){
 document.addEventListener("click", function(e){
   if(e.target.classList.contains("btn-extrac")){
     showExtracDetalle(e.target.dataset.silobolsa, e.target.dataset.grano);
-  }
-  if(e.target.classList.contains("btn-cond")){
-    showCondicionDetalle(e.target.dataset.acopio, e.target.dataset.grano, e.target.dataset.productor);
   }
 });
 if(window.innerWidth>=900) toggleSidebar(true);
@@ -2146,6 +2146,8 @@ async function loadFromSheets() {
           acopioProdRows.push({
             productor: curProd, acopio: c0, grano,
             stock_actual: parseNum(r[3]),
+            stock_planta: parseNum(r[4]),
+            stock_puerto: parseNum(r[5]),
             entregado: parseNum(r[8]),
             vendido: parseNum(r[11]),
           });
