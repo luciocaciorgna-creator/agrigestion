@@ -287,10 +287,18 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
       <th onclick="sortTable('tb-sg-ac',0)" style="cursor:pointer">Productor</th>
       <th onclick="sortTable('tb-sg-ac',1)" style="cursor:pointer">Acopio</th>
       <th onclick="sortTable('tb-sg-ac',2)" style="cursor:pointer">Grano</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',3,true)">Kg Entregados</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',4,true)">Kg Vendidos</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',5,true)">Stock Actual</th>
-      <th style="text-align:center">Alertas</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',3,true)">Kg Ent. Total</th>
+      <th style="text-align:right;cursor:pointer;background:#EEF7F2" onclick="sortTable('tb-sg-ac',4,true)">Kg Ent. Planta</th>
+      <th style="text-align:right;cursor:pointer;background:#EEF7F2" onclick="sortTable('tb-sg-ac',5,true)">Kg Ent. Puerto</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',6,true)">Kg Vend. Total</th>
+      <th style="text-align:right;cursor:pointer;background:#EEF7F0" onclick="sortTable('tb-sg-ac',7,true)">Kg Vend. Planta</th>
+      <th style="text-align:right;cursor:pointer;background:#EEF7F0" onclick="sortTable('tb-sg-ac',8,true)">Kg Vend. Puerto</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-sg-ac',9,true)">Stock Total</th>
+      <th style="text-align:right;cursor:pointer;background:#FBF3E0" onclick="sortTable('tb-sg-ac',10,true)">Stock Planta</th>
+      <th style="text-align:right;cursor:pointer;background:#FBF3E0" onclick="sortTable('tb-sg-ac',11,true)">Stock Puerto</th>
+      <th style="text-align:center">Alerta Planta</th>
+      <th style="text-align:center">Alerta Puerto</th>
+      <th style="text-align:center">Detalle</th>
     </tr></thead><tbody id="tb-sg-ac"></tbody></table></div>
 
   </div>
@@ -1299,6 +1307,32 @@ function diasMasProximo(generales, geaDet){
   return min;
 }
 
+// Días hasta la fecha más próxima (almacenaje libre o fijación) para UNA sola ubicación
+// (PLANTA o PUERTO). Para GEA, como la hoja no separa las partidas por ubicación,
+// se usa el detalle por partida completo (geaDet) igualmente.
+function diasParaUbicacion(acopio, grano, ubicacion, geaDet){
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  let min = null;
+  CONDICIONES_GENERAL.filter(c=>c.acopio===acopio && c.grano===grano && c.ubicacion===ubicacion).forEach(c=>{
+    [parseFechaCondicion(c.almacenaje_libre), parseFechaCondicion(c.fecha_max_fijacion)].forEach(p=>{
+      if(p.tipo==="fecha"){
+        const d = Math.round((new Date(p.iso+"T00:00:00")-hoy)/86400000);
+        if(min===null||d<min) min=d;
+      }
+    });
+  });
+  if(acopio==="GEA" && geaDet && geaDet.length){
+    geaDet.forEach(c=>{
+      const p = parseFechaCondicion(c.almacenaje_libre_hasta);
+      if(p.tipo==="fecha"){
+        const d = Math.round((new Date(p.iso+"T00:00:00")-hoy)/86400000);
+        if(min===null||d<min) min=d;
+      }
+    });
+  }
+  return min;
+}
+
 function toggleCondRow(btn){
   const row = btn.closest("tr");
   const next = row.nextElementSibling;
@@ -1312,7 +1346,7 @@ function toggleCondRow(btn){
   const stockPlanta = parseFloat(btn.dataset.planta)||0;
   const stockPuerto = parseFloat(btn.dataset.puerto)||0;
   const html = buildCondDetalleHtml(acopio, grano, productor, stockActual, stockPlanta, stockPuerto);
-  row.insertAdjacentHTML("afterend", '<tr class="cond-detail-row"><td colspan="7" style="background:#FAFAF8;padding:12px 16px;border-left:3px solid #C9A84C">'+html+'</td></tr>');
+  row.insertAdjacentHTML("afterend", '<tr class="cond-detail-row"><td colspan="15" style="background:#FAFAF8;padding:12px 16px;border-left:3px solid #C9A84C">'+html+'</td></tr>');
 }
 
 function buildCondDetalleHtml(acopio, grano, productor, stockActual, stockPlanta, stockPuerto){
@@ -1500,26 +1534,39 @@ function renderStockGrano(){
 
   ge("tb-sg-ac").innerHTML = acopioProdFiltered.map(r=>{
     const acopioColor = acopioColors[r.acopio] || (r.acopio.startsWith("PROTOIL")?"#6B21A8":"#555");
-    const generales = CONDICIONES_GENERAL.filter(c=>c.acopio===r.acopio && c.grano===r.grano);
     const geaDet = r.acopio==="GEA" ? CONDICIONES_GEA_DETALLE.filter(c=>c.productor===r.productor && c.grano===r.grano) : [];
-    const dias = diasMasProximo(generales, geaDet);
-    const hasCond = generales.length>0 || geaDet.length>0;
-    const dColor = dias===null ? "#9CA3AF" : (dias<=15?"#DC2626":(dias<=30?"#C9A84C":"#2D6A4F"));
-    const dLabel = dias===null ? "Ver" : (dias<0 ? "Vencido" : dias+"d");
+    const diasPlanta = (r.stock_planta>0) ? diasParaUbicacion(r.acopio, r.grano, "PLANTA", geaDet) : null;
+    const diasPuerto = (r.stock_puerto>0) ? diasParaUbicacion(r.acopio, r.grano, "PUERTO", geaDet) : null;
+    const hasCond = CONDICIONES_GENERAL.some(c=>c.acopio===r.acopio && c.grano===r.grano) || geaDet.length>0;
+    const alertBadge = (dias, tieneStock)=>{
+      if(!tieneStock) return '<span style="color:#D1D5DB;font-size:11px">—</span>';
+      if(dias===null) return '<span style="color:#9CA3AF;font-size:11px">Sin fecha</span>';
+      const c = dias<=15?"#DC2626":(dias<=30?"#C9A84C":"#2D6A4F");
+      const t = dias<0 ? "Vencido" : dias+"d";
+      return '<span style="background:'+c+'22;border:1.5px solid '+c+';color:'+c+';border-radius:12px;padding:2px 9px;font-size:10px;font-weight:800">'+t+'</span>';
+    };
     return '<tr>'
       +'<td><span class="dot" style="background:'+(prodColors[r.productor]||"#888")+'"></span><span style="font-size:11px">'+r.productor+'</span></td>'
       +'<td><span class="badge" style="background:'+acopioColor+'20;color:'+acopioColor+';font-size:11px;font-weight:900">'+r.acopio+'</span></td>'
       +'<td><span class="badge bg-trigo">'+r.grano+'</span></td>'
-      +'<td style="text-align:right">'+fmt(r.entregado,0)+' kg</td>'
-      +'<td style="text-align:right">'+fmt(r.vendido,0)+' kg</td>'
-      +'<td style="text-align:right;font-weight:800;color:#1A3C2E">'+fmt(r.stock_actual,0)+' kg</td>'
+      +'<td style="text-align:right">'+fmt(r.entregado,0)+'</td>'
+      +'<td style="text-align:right;background:#F5FBF8">'+fmt(r.ent_planta,0)+'</td>'
+      +'<td style="text-align:right;background:#F5FBF8">'+fmt(r.ent_puerto,0)+'</td>'
+      +'<td style="text-align:right">'+fmt(r.vendido,0)+'</td>'
+      +'<td style="text-align:right;background:#F5FAF5">'+fmt(r.vend_planta,0)+'</td>'
+      +'<td style="text-align:right;background:#F5FAF5">'+fmt(r.vend_puerto,0)+'</td>'
+      +'<td style="text-align:right;font-weight:800;color:#1A3C2E">'+fmt(r.stock_actual,0)+'</td>'
+      +'<td style="text-align:right;background:#FDF8ED;font-weight:700">'+fmt(r.stock_planta,0)+'</td>'
+      +'<td style="text-align:right;background:#FDF8ED;font-weight:700">'+fmt(r.stock_puerto,0)+'</td>'
+      +'<td style="text-align:center">'+alertBadge(diasPlanta, r.stock_planta>0)+'</td>'
+      +'<td style="text-align:center">'+alertBadge(diasPuerto, r.stock_puerto>0)+'</td>'
       +'<td style="text-align:center">'
       +(hasCond
-        ? '<button class="btn-cond" onclick="toggleCondRow(this)" data-acopio="'+r.acopio+'" data-grano="'+r.grano+'" data-productor="'+r.productor+'" data-stock="'+r.stock_actual+'" data-planta="'+(r.stock_planta||0)+'" data-puerto="'+(r.stock_puerto||0)+'" style="background:'+dColor+'22;border:1.5px solid '+dColor+';color:'+dColor+';border-radius:12px;padding:3px 10px;font-size:10px;font-weight:800;cursor:pointer">'+dLabel+'</button>'
+        ? '<button class="btn-cond" onclick="toggleCondRow(this)" data-acopio="'+r.acopio+'" data-grano="'+r.grano+'" data-productor="'+r.productor+'" data-stock="'+r.stock_actual+'" data-planta="'+(r.stock_planta||0)+'" data-puerto="'+(r.stock_puerto||0)+'" style="background:#1A3C2E;color:#C9A84C;border:none;border-radius:6px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer">Ver</button>'
         : '<span style="color:#D1D5DB;font-size:11px">—</span>')
       +'</td>'
       +'</tr>';
-  }).join("") || '<tr><td colspan="7" style="text-align:center;color:#6b7280;padding:16px">Sin datos en acopios — actualizá desde Google Sheets</td></tr>';
+  }).join("") || '<tr><td colspan="15" style="text-align:center;color:#6b7280;padding:16px">Sin datos en acopios — actualizá desde Google Sheets</td></tr>';
 
   // Silobolsa table - use SILOBOLSAS_DATA directly
   const gBg2 = {TRIGO:"#FEF3C7",SOJA:"#D1FAE5",MAIZ:"#FED7AA","MAIZ FLINT":"#DBEAFE"};
@@ -2148,7 +2195,11 @@ async function loadFromSheets() {
             stock_actual: parseNum(r[3]),
             stock_planta: parseNum(r[4]),
             stock_puerto: parseNum(r[5]),
+            ent_planta: parseNum(r[6]),
+            ent_puerto: parseNum(r[7]),
             entregado: parseNum(r[8]),
+            vend_planta: parseNum(r[9]),
+            vend_puerto: parseNum(r[10]),
             vendido: parseNum(r[11]),
           });
         } else if(mode==="silo"){
@@ -2184,6 +2235,32 @@ async function loadFromSheets() {
         kg_campo: s.kg_campo,
         kg_extraidos: extraidos,
         kg_restantes: Math.max(0, s.kg_campo - extraidos),
+      });
+    });
+
+    // Reflejar las extracciones de silobolsa como "viajes" adicionales en
+    // Resumen por campo y grano / Detalle de viajes, sumando sus kg netos igual
+    // que una entrega directa a acopio (se traduce el nombre de silobolsa a su lote real).
+    const silobolsaToLote = {};
+    silobolsasBase.forEach(s=>{ silobolsaToLote[s.silobolsa.toUpperCase()] = s.lote; });
+    extracRows.forEach(e=>{
+      const campo = silobolsaToLote[e.silobolsa.toUpperCase()] || e.silobolsa;
+      if(!LOTES_HA_MAP.hasOwnProperty(campo)) return;
+      const ha = LOTES_HA_MAP[campo]||0;
+      const kg_netos = e.kg_netos;
+      const prods_def = LOTES_PROD_MAP[campo]||[];
+      const neto_prods = prods_def.map(p=>({prod:p[0],pct:p[1],kg:Math.round(kg_netos*p[1]/100)}));
+      COSECHA_DATA.push({
+        fecha: e.fecha, campo, grano: e.grano,
+        variedad: e.variedad,
+        convenio: LOTES_CONV_MAP[campo]||"—",
+        destino: e.destino, planta: e.planta, puerto: "",
+        titular: e.titular, cp: e.cp,
+        flete_pag: "", camionero: e.camionero, patente: "",
+        km: 0, flete_corto: 0, flete_largo: 0, hum_campo: 0, hum_planta: 0,
+        kg_campo: e.kg_campo, descarga: e.descarga,
+        merma_fis: 0, volatil: 0, merma_tot: e.merma_tot,
+        kg_netos, ha, neto_prods,
       });
     });
 
