@@ -784,6 +784,7 @@ function renderLabores(){
           <span class="badge bg-verde" style="margin-left:6px">${l.tipo||"—"}</span>
           <span style="font-size:11px;color:#6b7280;margin-left:8px">${l.fecha}</span>
           ${l.cultivo?`<span class="badge bg-azul" style="margin-left:4px">${l.cultivo}</span>`:""}
+          ${l.actividad?`<span class="badge" style="margin-left:4px;background:#1A3C2E;color:#C9A84C">Act. ${l.actividad}</span>`:""}
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           ${l.contratista?`<span style="font-size:11px;color:#6b7280">🚜 ${l.contratista}</span>`:""}
@@ -2076,7 +2077,7 @@ async function loadFromSheets() {
     // Parse Labores - detect columns by name
     const laborMap = {};
     let labHeaderIdx = 0;
-    let lC = {fecha:0,lote:1,tipo:4,cultivo:5,contratista:6,tc:7,precio_mo_ha:8,insumo:11,cantidad:14,prod_a:16,teo_a:18,real_a:19,prod_b:21,teo_b:23,real_b:24};
+    let lC = {fecha:0,lote:1,tipo:4,cultivo:5,contratista:6,tc:7,precio_mo_ha:8,insumo:11,cantidad:14,prod_a:16,teo_a:18,real_a:19,prod_b:21,teo_b:23,real_b:24,actividad:-1};
     for(let i=0;i<Math.min(rawLabores.length,8);i++){
       const row = rawLabores[i];
       if(row[0]==="Fecha"||row[1]==="Lote"){
@@ -2098,6 +2099,7 @@ async function loadFromSheets() {
           else if(c.includes("cant")&&c.includes("real")&&c.includes("p.a")) lC.real_a=idx;
           else if(c.includes("cant")&&c.includes("teórica")&&c.includes("p.b")) lC.teo_b=idx;
           else if(c.includes("cant")&&c.includes("real")&&c.includes("p.b")) lC.real_b=idx;
+          else if(c.includes("actividad")||c.includes("n° act")||c.includes("nro act")) lC.actividad=idx;
         });
         console.log("Labores cols:", JSON.stringify(lC));
         break;
@@ -2108,9 +2110,13 @@ async function loadFromSheets() {
       if(!lote||lote===""||lote==="Lote") return;
       const fecha=String(r[lC.fecha]||"").substring(0,10);
       if(!fecha||fecha==="Fecha") return;
-      const key=fecha+"|"+lote;
+      // Si la hoja tiene una columna de N° de Actividad, se usa para distinguir
+      // labores distintas hechas el mismo día en el mismo lote (si no existe o
+      // está vacía, se agrupa solo por fecha+lote como antes).
+      const actividad = lC.actividad>=0 ? String(r[lC.actividad]||"").trim() : "";
+      const key=fecha+"|"+lote+(actividad?("|"+actividad):"");
       if(!laborMap[key]) laborMap[key]={
-        fecha, lote, tipos:new Set(),
+        fecha, lote, actividad, tipos:new Set(),
         cultivo:String(r[lC.cultivo]||""), contratista:String(r[lC.contratista]||""),
         tc:parseNum(r[lC.tc])||0, precio_mo_ha:parseNum(r[lC.precio_mo_ha])||0,
         prod_a:String(r[lC.prod_a]||""), prod_b:String(r[lC.prod_b]||""), insumos:[]
