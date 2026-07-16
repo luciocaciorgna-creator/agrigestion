@@ -1918,7 +1918,8 @@ function actualizarHistorialPizarra(fecha, freshData){
   return hist.data;
 }
 
-async function fetchConTimeout(url, ms){
+async function fetchConTimeout(url, ms, minLen){
+  if(minLen===undefined) minLen = 200; // por defecto pensado para páginas HTML largas
   const ctrl = new AbortController();
   const t = setTimeout(()=>ctrl.abort(), ms);
   try{
@@ -1926,7 +1927,7 @@ async function fetchConTimeout(url, ms){
     clearTimeout(t);
     if(!r.ok) return null;
     const txt = await r.text();
-    return (txt && txt.length>200) ? txt : null;
+    return (txt && txt.length>minLen) ? txt : null;
   }catch(e){
     clearTimeout(t);
     return null;
@@ -1947,7 +1948,7 @@ async function fetchPizarra(){
     // archivo api/pizarra.js todavía no está desplegado, esto falla silenciosamente
     // y se sigue con el plan B de abajo.
     try{
-      const rApi = await fetchConTimeout("/api/pizarra", 6000);
+      const rApi = await fetchConTimeout("/api/pizarra", 6000, 20);
       if(rApi){
         const json = JSON.parse(rApi);
         if(json && json.ok && json.data && Object.keys(json.data).length){
