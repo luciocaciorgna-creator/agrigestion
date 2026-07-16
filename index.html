@@ -1939,36 +1939,54 @@ async function fetchPizarra(){
   box.innerHTML = '<div style="font-size:11px;color:#6b7280;grid-column:1/-1">Actualizando precios de pizarra…</div>';
 
   try{
-    // Se prueban varias vías en orden: directo, y si CORS lo bloquea, un par de
-    // proxies públicos de lectura. Cada intento tiene un límite de tiempo para
-    // que nunca quede colgado si alguno no responde.
-    const intentos = [
-      PIZARRA_URL,
-      "https://r.jina.ai/"+PIZARRA_URL,
-      "https://api.allorigins.win/raw?url="+encodeURIComponent(PIZARRA_URL),
-      "https://corsproxy.io/?url="+encodeURIComponent(PIZARRA_URL),
-    ];
-    let html = null;
-    for(const url of intentos){
-      html = await fetchConTimeout(url, 8000);
-      if(html) break;
-    }
-    if(!html){
-      box.innerHTML = '<div style="font-size:11px;color:#DC2626;grid-column:1/-1">No se pudo obtener el precio de pizarra en este momento. '
-        +'<a href="'+PIZARRA_URL+'" target="_blank" style="color:#1A4D7C;font-weight:700">Ver en BCR ↗</a></div>';
-      return;
-    }
+    let fecha = null;
+    let freshData = null;
 
-    const clean = html.replace(/\s+/g," ");
-    const dateMatch = clean.match(/Precios Pizarra del d[ií]a\s*(\d{2}\/\d{2}\/\d{4})/i);
-    const fecha = dateMatch ? dateMatch[1] : new Date().toLocaleDateString("es-AR");
+    // 1) Vía preferida: la función serverless propia del proyecto (/api/pizarra),
+    // que trae el precio desde el servidor y no tiene problema de CORS. Si el
+    // archivo api/pizarra.js todavía no está desplegado, esto falla silenciosamente
+    // y se sigue con el plan B de abajo.
+    try{
+      const rApi = await fetchConTimeout("/api/pizarra", 6000);
+      if(rApi){
+        const json = JSON.parse(rApi);
+        if(json && json.ok && json.data && Object.keys(json.data).length){
+          fecha = json.fecha || new Date().toLocaleDateString("es-AR");
+          freshData = json.data;
+        }
+      }
+    }catch(e){ /* /api/pizarra no disponible todavía, se sigue con el plan B */ }
 
-    const freshData = {};
-    PIZARRA_GRANOS.forEach(g=>{
-      const re = new RegExp(g.re+"[\\s\\S]{0,400}?\\$\\s*([\\d.,]+)[\\s\\S]{0,250}?US\\$[^\\d]*([\\d.,]+)", "i");
-      const m = clean.match(re);
-      if(m) freshData[g.key] = { ars: parsePrecioARS(m[1]), usd: parsePrecioARS(m[2]) };
-    });
+    // 2) Plan B: intentar leer la página de BCR directamente desde el navegador,
+    // y si CORS lo bloquea, usar un proxy público de lectura. Menos confiable que
+    // la vía 1, pero sirve como respaldo mientras no se despliegue la función.
+    if(!freshData){
+      const intentos = [
+        PIZARRA_URL,
+        "https://r.jina.ai/"+PIZARRA_URL,
+        "https://api.allorigins.win/raw?url="+encodeURIComponent(PIZARRA_URL),
+        "https://corsproxy.io/?url="+encodeURIComponent(PIZARRA_URL),
+      ];
+      let html = null;
+      for(const url of intentos){
+        html = await fetchConTimeout(url, 8000);
+        if(html) break;
+      }
+      if(!html){
+        box.innerHTML = '<div style="font-size:11px;color:#DC2626;grid-column:1/-1">No se pudo obtener el precio de pizarra en este momento. '
+          +'<a href="'+PIZARRA_URL+'" target="_blank" style="color:#1A4D7C;font-weight:700">Ver en BCR ↗</a></div>';
+        return;
+      }
+      const clean = html.replace(/\s+/g," ");
+      const dateMatch = clean.match(/Precios Pizarra del d[ií]a\s*(\d{2}\/\d{2}\/\d{4})/i);
+      fecha = dateMatch ? dateMatch[1] : new Date().toLocaleDateString("es-AR");
+      freshData = {};
+      PIZARRA_GRANOS.forEach(g=>{
+        const re = new RegExp(g.re+"[\\s\\S]{0,400}?\\$\\s*([\\d.,]+)[\\s\\S]{0,250}?US\\$[^\\d]*([\\d.,]+)", "i");
+        const m = clean.match(re);
+        if(m) freshData[g.key] = { ars: parsePrecioARS(m[1]), usd: parsePrecioARS(m[2]) };
+      });
+    }
 
     if(Object.keys(freshData).length===0){
       box.innerHTML = '<div style="font-size:11px;color:#DC2626;grid-column:1/-1">Se pudo acceder a BCR pero no se reconoció el formato de precios. '
@@ -2080,7 +2098,11 @@ async function loadFromSheets() {
     let lC = {fecha:0,lote:1,tipo:4,cultivo:5,contratista:6,tc:7,precio_mo_ha:8,insumo:11,cantidad:14,prod_a:16,teo_a:18,real_a:19,prod_b:21,teo_b:23,real_b:24,actividad:-1};
     for(let i=0;i<Math.min(rawLabores.length,8);i++){
       const row = rawLabores[i];
-      if(row[0]==="Fecha"||row[1]==="Lote"){
+      // Se busca "Fecha" y "Lote" en CUALQUIER columna de la fila (no en una posición
+      // fija), para que no se rompa si se insertan o mueven columnas en la hoja.
+      const hasFecha = row.some(c=>String(c||"").trim().toLowerCase()==="fecha");
+      const hasLote  = row.some(c=>String(c||"").trim().toLowerCase()==="lote");
+      if(hasFecha && hasLote){
         labHeaderIdx = i+1;
         row.forEach((h,idx)=>{
           const c = String(h||"").replace(/\n/g," ").trim().toLowerCase();
