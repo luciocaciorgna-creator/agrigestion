@@ -2133,11 +2133,13 @@ async function loadFromSheets() {
       if(!lote||lote===""||lote==="Lote") return;
       const fecha=String(r[lC.fecha]||"").substring(0,10);
       if(!fecha||fecha==="Fecha") return;
-      // Si la hoja tiene una columna de N° de Actividad, se usa para distinguir
-      // labores distintas hechas el mismo día en el mismo lote (si no existe o
-      // está vacía, se agrupa solo por fecha+lote como antes).
+      // Si la hoja tiene una columna de N° de Actividad, se agrupa SOLO por ese
+      // código (ignorando la fecha), porque puede haber alguna fila de insumo de
+      // la misma actividad cargada con una fecha ligeramente distinta a las demás
+      // y eso no debe partirla en dos tarjetas. Si no hay columna de actividad
+      // (o está vacía en esa fila), se agrupa por fecha+lote como antes.
       const actividad = lC.actividad>=0 ? String(r[lC.actividad]||"").trim() : "";
-      const key=fecha+"|"+lote+(actividad?("|"+actividad):"");
+      const key = actividad ? actividad : (fecha+"|"+lote);
       if(!laborMap[key]) laborMap[key]={
         fecha, lote, actividad, tipos:new Set(),
         cultivo:String(r[lC.cultivo]||""), contratista:String(r[lC.contratista]||""),
@@ -2146,7 +2148,10 @@ async function loadFromSheets() {
       };
       const lab=laborMap[key];
       const tipo=String(r[lC.tipo]||"");
-      if(tipo&&tipo!=="Tipo Labor"&&tipo!=="Tipo de Labor") lab.tipos.add(tipo);
+      if(tipo&&tipo!=="Tipo Labor"&&tipo!=="Tipo de Labor"){
+        lab.tipos.add(tipo);
+        lab.fecha = fecha; // la fila "principal" de la actividad manda la fecha mostrada
+      }
       if(!lab.cultivo&&r[lC.cultivo]) lab.cultivo=String(r[lC.cultivo]);
       if(!lab.contratista&&r[lC.contratista]) lab.contratista=String(r[lC.contratista]);
       if(!lab.tc&&r[lC.tc]) lab.tc=parseNum(r[lC.tc])||0;
