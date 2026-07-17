@@ -703,7 +703,7 @@ function renderLabores(){
   },0);
   const totIns_USD = f.reduce((a,l)=>{
     const tc=l.tc||TC;
-    return a + (Array.isArray(l.insumos)?l.insumos:[]).reduce((b,i)=>b+(i.cantidad||0)*(precioIns[i.nombre]||0),0);
+    return a + (Array.isArray(l.insumos)?l.insumos:[]).reduce((b,i)=>b+(i.cantidad||0)*(i.precio_usd_u||precioIns[i.nombre]||0),0);
   },0);
 
   ge("kpi-labores").innerHTML=`
@@ -720,7 +720,7 @@ function renderLabores(){
     const tc = l.tc || TC;
     if(!byLote[l.lote]) byLote[l.lote]={mo:0, ins:0};
     byLote[l.lote].mo  += (l.precio_mo_ha||0)/tc;
-    byLote[l.lote].ins += (Array.isArray(l.insumos)?l.insumos:[]).reduce((a,i)=>a+(i.cantidad||0)*(precioIns[i.nombre]||0),0)/ha;
+    byLote[l.lote].ins += (Array.isArray(l.insumos)?l.insumos:[]).reduce((a,i)=>a+(i.cantidad||0)*(i.precio_usd_u||precioIns[i.nombre]||0),0)/ha;
   });
   const loteKeys = Object.keys(byLote).sort((a,b)=>((byLote[b].mo+byLote[b].ins)-(byLote[a].mo+byLote[a].ins))).slice(0,12);
   dC("ch-lab");
@@ -745,7 +745,7 @@ function renderLabores(){
     const ha = getLoteHa(l.lote) || 1;
     const tc = l.tc || TC;
     const moUSD = l.precio_mo_ha ? l.precio_mo_ha/tc : 0;
-    const insUSD = (Array.isArray(l.insumos)?l.insumos:[]).reduce((a,i)=>a+(i.cantidad||0)*(precioIns[i.nombre]||0),0);
+    const insUSD = (Array.isArray(l.insumos)?l.insumos:[]).reduce((a,i)=>a+(i.cantidad||0)*(i.precio_usd_u||precioIns[i.nombre]||0),0);
     const insUSDha = insUSD / ha;
 
     const insHtml = (Array.isArray(l.insumos)?l.insumos:[]).length > 0 ? `
@@ -760,7 +760,7 @@ function renderLabores(){
         <tbody>
         ${(Array.isArray(l.insumos)?l.insumos:[]).map(i=>{
           const pha = ha>0?i.cantidad/ha:0;
-          const precio = precioIns[i.nombre]||0;
+          const precio = i.precio_usd_u||precioIns[i.nombre]||0;
           const totUSD = i.cantidad*precio;
           return `<tr>
             <td><strong>${i.nombre}</strong></td>
@@ -1815,19 +1815,32 @@ const SHEET_URLS = {
 };
 
 function parseCSV(text) {
-  const lines = text.split("\n");
-  return lines.map(line => {
-    const result = [];
-    let cell = "", inQ = false;
-    for(let i=0; i<line.length; i++) {
-      const ch = line[i];
-      if(ch==='"') { inQ=!inQ; }
-      else if(ch===','&&!inQ) { result.push(cell.trim()); cell=""; }
-      else { cell+=ch; }
+  // Parser carácter por carácter (no separa por "\n" antes de tiempo), para
+  // soportar celdas entre comillas que tienen saltos de línea adentro (por
+  // ejemplo encabezados en 2-3 líneas como "T.C.\n($/USD)") o comas dentro del
+  // texto. Antes se cortaba el texto por líneas primero, lo que rompía cualquier
+  // celda multilínea entre comillas (perdía el estado de "estoy dentro de comillas").
+  const rows = [];
+  let row = [], cell = "", inQ = false;
+  for(let i=0; i<text.length; i++){
+    const ch = text[i];
+    if(inQ){
+      if(ch === '"'){
+        if(text[i+1] === '"'){ cell += '"'; i++; } // comilla escapada ""
+        else inQ = false;
+      } else {
+        cell += ch;
+      }
+    } else {
+      if(ch === '"'){ inQ = true; }
+      else if(ch === ','){ row.push(cell.trim()); cell=""; }
+      else if(ch === '\r'){ /* se ignora, \n lo maneja abajo */ }
+      else if(ch === '\n'){ row.push(cell.trim()); cell=""; rows.push(row); row=[]; }
+      else { cell += ch; }
     }
-    result.push(cell.trim());
-    return result;
-  }).filter(r=>r.some(c=>c!==""));
+  }
+  if(cell.length>0 || row.length>0){ row.push(cell.trim()); rows.push(row); }
+  return rows.filter(r=>r.some(c=>c!==""));
 }
 
 // Parse number from CSV - handles both "6.000" (ES locale) and "6000" (EN)
@@ -2096,7 +2109,7 @@ async function loadFromSheets() {
     // Parse Labores - detect columns by name
     const laborMap = {};
     let labHeaderIdx = 0;
-    let lC = {fecha:0,lote:1,tipo:4,cultivo:5,contratista:6,tc:7,precio_mo_ha:8,insumo:11,cantidad:14,prod_a:16,teo_a:18,real_a:19,prod_b:21,teo_b:23,real_b:24,actividad:-1};
+    let lC = {fecha:0,lote:1,tipo:4,cultivo:5,contratista:6,tc:7,precio_mo_ha:8,insumo:11,cantidad:14,prod_a:16,teo_a:18,real_a:19,prod_b:21,teo_b:23,real_b:24,actividad:-1,precio_usd_u:-1};
     for(let i=0;i<Math.min(rawLabores.length,8);i++){
       const row = rawLabores[i];
       // Se busca "Fecha" y "Lote" en CUALQUIER columna de la fila (no en una posición
@@ -2123,6 +2136,7 @@ async function loadFromSheets() {
           else if(c.includes("cant")&&c.includes("teórica")&&c.includes("p.b")) lC.teo_b=idx;
           else if(c.includes("cant")&&c.includes("real")&&c.includes("p.b")) lC.real_b=idx;
           else if(c.includes("actividad")||c.includes("n° act")||c.includes("nro act")) lC.actividad=idx;
+          else if(c.includes("precio usd")&&c.includes("compra")) lC.precio_usd_u=idx;
         });
         console.log("Labores cols:", JSON.stringify(lC));
         break;
@@ -2160,15 +2174,29 @@ async function loadFromSheets() {
       if(!lab.prod_b&&r[lC.prod_b]) lab.prod_b=String(r[lC.prod_b]);
       const ins=String(r[lC.insumo]||"");
       if(ins&&ins!=="Insumo"&&ins!==""){
-        if(!lab.insumos.find(i=>i.nombre===ins))
+        const precioFila = lC.precio_usd_u>=0 ? parseNum(r[lC.precio_usd_u])||0 : 0;
+        const cantFila = parseNum(r[lC.cantidad])||0;
+        const existente = lab.insumos.find(i=>i.nombre===ins);
+        if(existente){
+          // Mismo insumo aparece en más de una fila dentro de la misma actividad:
+          // se suman las cantidades en vez de descartar la segunda fila.
+          existente.cantidad += cantFila;
+          existente.cant_teo_a += parseNum(r[lC.teo_a])||0;
+          existente.cant_real_a += parseNum(r[lC.real_a])||0;
+          existente.cant_teo_b += parseNum(r[lC.teo_b])||0;
+          existente.cant_real_b += parseNum(r[lC.real_b])||0;
+          if(!existente.precio_usd_u && precioFila) existente.precio_usd_u = precioFila;
+        } else {
           lab.insumos.push({
             nombre:ins,
-            cantidad:parseNum(r[lC.cantidad])||0,
+            cantidad:cantFila,
             cant_teo_a:parseNum(r[lC.teo_a])||0,
             cant_real_a:parseNum(r[lC.real_a])||0,
             cant_teo_b:parseNum(r[lC.teo_b])||0,
             cant_real_b:parseNum(r[lC.real_b])||0,
+            precio_usd_u:precioFila,
           });
+        }
       }
     });
         const labores=Object.values(laborMap).map(l=>{
