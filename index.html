@@ -2174,7 +2174,11 @@ async function loadFromSheets() {
       if(!lab.prod_b&&r[lC.prod_b]) lab.prod_b=String(r[lC.prod_b]);
       const ins=String(r[lC.insumo]||"");
       if(ins&&ins!=="Insumo"&&ins!==""){
-        const precioFila = lC.precio_usd_u>=0 ? parseNum(r[lC.precio_usd_u])||0 : 0;
+        // OJO: esta columna siempre tiene 3 decimales (ej "4,900" = 4,9 USD), y
+        // parseNum() confunde eso con un separador de miles. Se usa parsePrecioARS,
+        // que trata la coma siempre como separador decimal sin importar la cantidad
+        // de dígitos (igual que con los precios de pizarra).
+        const precioFila = lC.precio_usd_u>=0 ? parsePrecioARS(r[lC.precio_usd_u]) : 0;
         const cantFila = parseNum(r[lC.cantidad])||0;
         const existente = lab.insumos.find(i=>i.nombre===ins);
         if(existente){
