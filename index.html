@@ -1825,11 +1825,13 @@ function renderFacturacion(){
   }).join("") : `<tr><td colspan="14" style="text-align:center;color:#6b7280;padding:16px">Sin datos — actualizá desde Google Sheets</td></tr>`;
 
   if(f.length){
+    const totHaTotales  = f.reduce((a,x)=>a+x.ha_totales,0);
     const totHaHector   = f.reduce((a,x)=>a+x.ha_hector,0);
     const totHaSucesion = f.reduce((a,x)=>a+x.ha_sucesion,0);
     const totHaJavier   = f.reduce((a,x)=>a+x.ha_javier,0);
     ge("tb-fact-det").innerHTML += `<tr style="background:#F0DFA0;font-weight:800">
-      <td colspan="5">TOTAL</td>
+      <td colspan="4">TOTAL</td>
+      <td style="text-align:right">${fmt(totHaTotales,1)}</td>
       <td style="text-align:right;background:#EEF7F2">${fmt(totHaHector,1)}</td>
       <td style="text-align:right;background:#DCE9F5">${fmt(totHaSucesion,1)}</td>
       <td style="text-align:right;background:#FBF3E0">${fmt(totHaJavier,1)}</td>
