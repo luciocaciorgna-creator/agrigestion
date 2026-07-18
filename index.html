@@ -134,6 +134,7 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
       <button class="tab" onclick="showPage('labores',this)">🚜 Registro de labores</button>
       <button class="tab" onclick="showPage('aportes',this)">👥 Aportes</button>
       <button class="tab" onclick="showPage('retiros_vs',this)">📊 Aportes Insumos</button>
+      <button class="tab" onclick="showPage('facturacion',this)">🧾 Facturación</button>
     </div>
   </div>
 
@@ -458,7 +459,7 @@ function showPage(id,btn){
     ge("sidebar").classList.remove("open");
     ge("sidebar-overlay").classList.remove("open");
   }
-  const fns={stock:renderStock,compras:renderCompras,retiros:renderRetiros,labores:renderLabores,lotes:renderLotes,aportes:renderAportes,retiros_vs:renderRetirosVsAportes,cosecha:renderCosecha,stockgrano:renderStockGrano,ventas:renderVentas};
+  const fns={stock:renderStock,compras:renderCompras,retiros:renderRetiros,labores:renderLabores,lotes:renderLotes,aportes:renderAportes,retiros_vs:renderRetirosVsAportes,cosecha:renderCosecha,stockgrano:renderStockGrano,ventas:renderVentas,facturacion:renderFacturacion};
   if(fns[id]) try{ fns[id](); } catch(e){ console.error("Error en "+id+":", e); }
 }
 
@@ -948,15 +949,37 @@ function renderAportes(){
 
 
 // ── APORTES INSUMOS Teórico vs Real ─────────────────────────────────────────
+let apInsConvSel = new Set();
+
+function toggleApInsConv(conv){
+  if(apInsConvSel.has(conv)) apInsConvSel.delete(conv);
+  else apInsConvSel.add(conv);
+  renderRetirosVsAportes();
+}
+
 function renderRetirosVsAportes(){
   const ins  = (ge("fv-ins")?.value||"").toLowerCase();
   const prod = ge("fv-prod")?.value||"";
   const lote = ge("fv-lote")?.value||"";
-  const conv = ge("fv-conv")?.value||"";
+  const soloDif = ge("fv-solodif")?.checked||false;
 
   popSel("fv-prod", DATA.labores.flatMap(l=>[l.prod_a,l.prod_b]).filter(Boolean));
   popSel("fv-lote", DATA.labores.map(l=>l.lote).filter(Boolean));
-  popSel("fv-conv", Object.keys(DATA.convenios));
+
+  // Chips de convenio (multi-selección)
+  const allConvenios = Object.keys(DATA.convenios);
+  const chipsEl = ge("fv-conv-chips");
+  if(chipsEl){
+    chipsEl.innerHTML = "";
+    allConvenios.forEach(function(c){
+      const sel = apInsConvSel.has(c);
+      const span = document.createElement("span");
+      span.textContent = (sel ? "✓ " : "") + c;
+      span.style.cssText = "cursor:pointer;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;display:inline-block;margin:2px;background:" + (sel ? "#1A3C2E" : "#EDE9E1") + ";color:" + (sel ? "#C9A84C" : "#1a1a1a");
+      span.onclick = (function(conv){ return function(){ toggleApInsConv(conv); }; })(c);
+      chipsEl.appendChild(span);
+    });
+  }
 
   // Aggregate by lote+insumo
   const agg = {};
@@ -964,7 +987,7 @@ function renderRetirosVsAportes(){
     if(lote && lab.lote!==lote) return;
     const loteInfo = DATA.lotes.find(l=>l.nombre===lab.lote);
     const convenio = loteInfo?.convenio||"—";
-    if(conv && convenio!==conv) return;
+    if(apInsConvSel.size>0 && !apInsConvSel.has(convenio)) return;
 
     (Array.isArray(lab.insumos)?lab.insumos:[]).forEach(i=>{
       if(!i.nombre) return;
@@ -985,7 +1008,19 @@ function renderRetirosVsAportes(){
     });
   });
 
-  const rows = Object.values(agg).sort((a,b)=>a.lote.localeCompare(b.lote)||a.insumo.localeCompare(b.insumo));
+  let rows = Object.values(agg).map(r=>{
+    r.dA = r.real_a - r.teo_a;
+    r.dB = r.real_b - r.teo_b;
+    return r;
+  });
+
+  if(soloDif) rows = rows.filter(r=>Math.abs(r.dA)>0.001||Math.abs(r.dB)>0.001);
+
+  // Orden: si se filtra "solo diferencias", se ordena de mayor a menor diferencia
+  // absoluta (lo más urgente primero); si no, orden alfabético por lote+insumo.
+  rows = soloDif
+    ? rows.sort((a,b)=>Math.max(Math.abs(b.dA),Math.abs(b.dB))-Math.max(Math.abs(a.dA),Math.abs(a.dB)))
+    : rows.sort((a,b)=>a.lote.localeCompare(b.lote)||a.insumo.localeCompare(b.insumo));
 
   const totTeoA  = rows.reduce((a,r)=>a+r.teo_a,0);
   const totRealA = rows.reduce((a,r)=>a+r.real_a,0);
@@ -999,12 +1034,37 @@ function renderRetirosVsAportes(){
     <div class="kpi" style="border-color:#1A4D7C"><div class="val">${fmt(totTeoB,1)}</div><div class="lbl">Teórico Prod.B</div></div>
     <div class="kpi" style="border-color:#1A4D7C"><div class="val">${fmt(totRealB,1)}</div><div class="lbl">Real Prod.B</div></div>`;
 
+  // ── Resumen de diferencias por Convenio ──────────────────────────────────
+  const porConv = {};
+  rows.forEach(r=>{
+    if(!porConv[r.convenio]) porConv[r.convenio]={convenio:r.convenio, dA:0, dB:0, n:0};
+    porConv[r.convenio].dA += r.dA;
+    porConv[r.convenio].dB += r.dB;
+    if(Math.abs(r.dA)>0.001||Math.abs(r.dB)>0.001) porConv[r.convenio].n++;
+  });
+  const convRows = Object.values(porConv).sort((a,b)=>(Math.abs(b.dA)+Math.abs(b.dB))-(Math.abs(a.dA)+Math.abs(a.dB)));
+  ge("tb-conv-resumen").innerHTML = convRows.length ? `
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th>Convenio</th>
+      <th style="text-align:right">Combinaciones c/diferencia</th>
+      <th style="text-align:right">Diferencia total Prod.A</th>
+      <th style="text-align:right">Diferencia total Prod.B</th>
+    </tr></thead><tbody>
+      ${convRows.map(c=>`<tr>
+        <td><strong>${c.convenio}</strong></td>
+        <td style="text-align:right">${c.n}</td>
+        <td style="text-align:right;font-weight:700;color:${c.dA>=0?"#059669":"#DC2626"}">${(c.dA>=0?"+":"")+fmt(c.dA,2)}</td>
+        <td style="text-align:right;font-weight:700;color:${c.dB>=0?"#059669":"#DC2626"}">${(c.dB>=0?"+":"")+fmt(c.dB,2)}</td>
+      </tr>`).join("")}
+    </tbody></table></div>` : `<div style="color:#6b7280;font-size:12px;padding:8px">Sin datos</div>`;
+
   ge("tb-retvsap").innerHTML = rows.length ? rows.map(r=>{
-    const dA = r.real_a - r.teo_a;
-    const dB = r.real_b - r.teo_b;
+    const dA = r.dA, dB = r.dB;
     const hA = r.teo_a>0||r.real_a>0;
     const hB = r.teo_b>0||r.real_b>0;
-    return `<tr>
+    const tieneDif = Math.abs(dA)>0.001||Math.abs(dB)>0.001;
+    const rowBg = tieneDif ? (dA<0||dB<0 ? "background:#FEF2F2" : "background:#F0FDF4") : "";
+    return `<tr style="${rowBg}">
       <td><strong>${r.lote}</strong></td>
       <td style="font-size:11px;color:#6b7280">${r.convenio}</td>
       <td><span class="badge bg-trigo">${r.insumo}</span></td>
@@ -1035,6 +1095,7 @@ let STOCKGRANO_ACOPIO = [];
 let VENTAS_DATA = [];
 let CONDICIONES_GENERAL = [];
 let CONDICIONES_GEA_DETALLE = [];
+let FACTURACION_DATA = [];
 
 let cosechaLotesSel = new Set();
 
@@ -1646,6 +1707,77 @@ function showExtracDetalle(silobolsa, grano){
   detail.scrollIntoView({behavior:"smooth"});
 }
 
+// ── FACTURACIÓN ────────────────────────────────────────────────────────────────
+function renderFacturacion(){
+  const cont   = ge("ff-cont")?.value||"";
+  const loteF  = ge("ff-lote")?.value||"";
+  const tipoF  = ge("ff-tipo")?.value||"";
+  const estado = ge("ff-estado")?.value||"";
+
+  popSel("ff-cont", FACTURACION_DATA.map(f=>f.contratista));
+  popSel("ff-lote", FACTURACION_DATA.map(f=>f.lote));
+  popSel("ff-tipo", FACTURACION_DATA.map(f=>f.tipo));
+
+  const f = FACTURACION_DATA.filter(x=>
+    (!cont ||x.contratista===cont) &&
+    (!loteF||x.lote===loteF) &&
+    (!tipoF||x.tipo===tipoF) &&
+    (!estado || (estado==="pendiente" ? !x.facturado : x.facturado))
+  ).map(x=>({...x, monto_ars:x.ha_totales*x.precio_ars_ha, monto_usd:x.ha_totales*x.precio_usd_ha}))
+   .sort((a,b)=>b.fecha.localeCompare(a.fecha));
+
+  const pendientes = f.filter(x=>!x.facturado);
+  const totHaPend  = pendientes.reduce((a,x)=>a+x.ha_totales,0);
+  const totArsPend = pendientes.reduce((a,x)=>a+x.monto_ars,0);
+  const totUsdPend = pendientes.reduce((a,x)=>a+x.monto_usd,0);
+
+  ge("kpi-fact").innerHTML = `
+    <div class="kpi" style="border-color:#DC2626"><div class="val">${pendientes.length}</div><div class="lbl">Labores pendientes</div></div>
+    <div class="kpi" style="border-color:#C9A84C"><div class="val">${fmt(totHaPend,1)}</div><div class="lbl">Ha pendientes</div></div>
+    <div class="kpi" style="border-color:#1A3C2E"><div class="val">${totArsPend>0?fmtP(totArsPend):"—"}</div><div class="lbl">Monto $ pendiente</div></div>
+    <div class="kpi" style="border-color:#1A4D7C"><div class="val">${totUsdPend>0?fmtU(totUsdPend):"—"}</div><div class="lbl">Monto U$D pendiente</div></div>`;
+
+  // ── Resumen por Contratista (siempre sobre lo PENDIENTE, sin importar el filtro de Estado) ──
+  const baseContratista = FACTURACION_DATA.filter(x=>
+    (!cont ||x.contratista===cont) && (!loteF||x.lote===loteF) && (!tipoF||x.tipo===tipoF) && !x.facturado
+  );
+  const porCont = {};
+  baseContratista.forEach(x=>{
+    if(!porCont[x.contratista]) porCont[x.contratista]={contratista:x.contratista, n:0, ha:0, ars:0, usd:0};
+    porCont[x.contratista].n++;
+    porCont[x.contratista].ha  += x.ha_totales;
+    porCont[x.contratista].ars += x.ha_totales*x.precio_ars_ha;
+    porCont[x.contratista].usd += x.ha_totales*x.precio_usd_ha;
+  });
+  const contRows = Object.values(porCont).sort((a,b)=>b.ha-a.ha);
+  ge("tb-fact-cont").innerHTML = contRows.length ? contRows.map(c=>`<tr>
+      <td><strong>${c.contratista}</strong></td>
+      <td style="text-align:right">${c.n}</td>
+      <td style="text-align:right;font-weight:700;color:#C9A84C">${fmt(c.ha,1)}</td>
+      <td style="text-align:right">${c.ars>0?fmtP(c.ars):"—"}</td>
+      <td style="text-align:right">${c.usd>0?fmtU(c.usd):"—"}</td>
+    </tr>`).join("") : `<tr><td colspan="5" style="text-align:center;color:#6b7280;padding:16px">Sin pendientes 🎉</td></tr>`;
+
+  ge("tb-fact-det").innerHTML = f.length ? f.map(x=>{
+    const fd = x.fecha && /^\d{4}-\d{2}-\d{2}/.test(x.fecha) ? x.fecha.substring(8,10)+"/"+x.fecha.substring(5,7)+"/"+x.fecha.substring(0,4) : (x.fecha||"—");
+    return `<tr>
+      <td>${fd}</td>
+      <td>${x.contratista}</td>
+      <td><span class="badge bg-verde">${x.tipo||"—"}</span></td>
+      <td>${x.lote}</td>
+      <td style="text-align:right">${fmt(x.ha_totales,1)}</td>
+      <td style="text-align:right">${x.precio_ars_ha?fmtP(x.precio_ars_ha):"—"}</td>
+      <td style="text-align:right">${x.precio_usd_ha?fmtU(x.precio_usd_ha):"—"}</td>
+      <td style="text-align:right">${x.monto_ars>0?fmtP(x.monto_ars):"—"}</td>
+      <td style="text-align:right">${x.monto_usd>0?fmtU(x.monto_usd):"—"}</td>
+      <td>${x.facturado
+        ? '<span class="badge" style="background:#DCFCE7;color:#059669">Facturado</span>'
+        : '<span class="badge" style="background:#FEF3C7;color:#B45309">Pendiente</span>'}</td>
+      <td style="font-size:11px">${x.nro_factura||"—"}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="11" style="text-align:center;color:#6b7280;padding:16px">Sin datos — actualizá desde Google Sheets</td></tr>`;
+}
+
 // ── VENTAS ────────────────────────────────────────────────────────────────────
 function renderVentas(){
   const fGrano  = ge("fv2-grano")?.value||"";
@@ -1812,6 +1944,7 @@ const SHEET_URLS = {
   StockGrano: "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=2076937356",
   Ventas: "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=240216627",
   Condiciones: "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=481880400",
+  Facturacion: "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=844961174",
 };
 
 function parseCSV(text) {
@@ -2047,7 +2180,7 @@ async function loadFromSheets() {
   showToast("⟳ Cargando datos de Google Sheets...");
   try {
     // Fetch all sheets in parallel
-    const [rawCompras, rawRetiros, rawLotes, rawLabores, rawCosecha, rawStockGrano, rawVentas, rawCondiciones] = await Promise.all([
+    const [rawCompras, rawRetiros, rawLotes, rawLabores, rawCosecha, rawStockGrano, rawVentas, rawCondiciones, rawFacturacion] = await Promise.all([
       fetch(SHEET_URLS.Compras).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Retiros).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Lotes).then(r=>r.text()).then(parseCSV),
@@ -2056,6 +2189,7 @@ async function loadFromSheets() {
       fetch(SHEET_URLS.StockGrano).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Ventas).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Condiciones).then(r=>r.text()).then(parseCSV),
+      fetch(SHEET_URLS.Facturacion).then(r=>r.text()).then(parseCSV),
     ]);
 
     // Parse Compras - find header row dynamically
@@ -2554,7 +2688,40 @@ async function loadFromSheets() {
     CONDICIONES_GEA_DETALLE.length = 0;
     condGeaDetalle.forEach(c=>CONDICIONES_GEA_DETALLE.push(c));
 
-    showToast(`✓ Actualizado: ${compras.length} compras · ${retiros.length} retiros · ${labores.length} labores · ${cosecha.length} cosecha · ${ventas.length} ventas · ${condGeneral.length+condGeaDetalle.length} condiciones`);
+    // Parse Facturación: FECHA | TIPO LABOR | CONTRATISTA | HA TOTALES | LOTE |
+    // HA HECTOR | HA SUCESION | HA JAVIER | $/HA | U$D/HA | FACTURADO |
+    // FECHA FACTURACION | N° DE FACTURA
+    const facturacion = [];
+    {
+      let facHeaderIdx = 0;
+      for(let i=0;i<Math.min(rawFacturacion.length,8);i++){
+        const row = rawFacturacion[i];
+        const hasFecha = row.some(c=>String(c||"").trim().toLowerCase()==="fecha");
+        const hasContr = row.some(c=>String(c||"").trim().toLowerCase()==="contratista");
+        if(hasFecha && hasContr){ facHeaderIdx = i+1; break; }
+      }
+      rawFacturacion.slice(facHeaderIdx).forEach(r=>{
+        const contratista = String(r[3]||"").trim();
+        const loteF = String(r[5]||"").trim();
+        if(!contratista || contratista==="Contratista") return;
+        const fechaRaw = String(r[1]||"").trim();
+        const m = fechaRaw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        const fecha = m ? m[3]+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0") : fechaRaw;
+        const facturadoRaw = String(r[11]||"").trim();
+        const facturado = /^(si|sí|true|x|facturado)$/i.test(facturadoRaw);
+        facturacion.push({
+          fecha, tipo: String(r[2]||"").trim(), contratista, lote: loteF,
+          ha_totales: parseNum(r[4]),
+          ha_hector: parseNum(r[6]), ha_sucesion: parseNum(r[7]), ha_javier: parseNum(r[8]),
+          precio_ars_ha: parsePrecioARS(r[9]), precio_usd_ha: parsePrecioARS(r[10]),
+          facturado, fecha_facturacion: String(r[12]||"").trim(), nro_factura: String(r[13]||"").trim(),
+        });
+      });
+    }
+    FACTURACION_DATA.length = 0;
+    facturacion.forEach(f=>FACTURACION_DATA.push(f));
+
+    showToast(`✓ Actualizado: ${compras.length} compras · ${retiros.length} retiros · ${labores.length} labores · ${cosecha.length} cosecha · ${ventas.length} ventas · ${condGeneral.length+condGeaDetalle.length} condiciones · ${facturacion.length} facturación`);
     const activeTab=document.querySelector(".tab.active");
     if(activeTab) activeTab.click();
 
@@ -2579,8 +2746,20 @@ loadFromSheets();
     <div><label>Insumo</label><input type="text" id="fv-ins" placeholder="Buscar insumo..." oninput="renderRetirosVsAportes()"></div>
     <div><label>Productor</label><select id="fv-prod" onchange="renderRetirosVsAportes()"><option value="">Todos</option></select></div>
     <div><label>Lote</label><select id="fv-lote" onchange="renderRetirosVsAportes()"><option value="">Todos</option></select></div>
-    <div><label>Convenio</label><select id="fv-conv" onchange="renderRetirosVsAportes()"><option value="">Todos</option></select></div>
-    <button class="btn-cl" onclick="clrF(['fv-ins','fv-prod','fv-lote','fv-conv'],renderRetirosVsAportes)">✕ Limpiar</button>
+    <button class="btn-cl" onclick="clrF(['fv-ins','fv-prod','fv-lote'],function(){apInsConvSel.clear();renderRetirosVsAportes();})">✕ Limpiar</button>
+  </div>
+  <div style="margin:-6px 0 10px">
+    <label style="font-size:11px;color:#6b7280;font-weight:700;display:block;margin-bottom:4px">Convenio (elegí uno o varios — sin elegir ninguno se ven todos)</label>
+    <div id="fv-conv-chips"></div>
+  </div>
+  <div style="margin:-4px 0 12px">
+    <label style="font-size:12px;font-weight:700;color:#1A3C2E;cursor:pointer">
+      <input type="checkbox" id="fv-solodif" onchange="renderRetirosVsAportes()"> Mostrar solo filas con diferencia (Real ≠ Teórico)
+    </label>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <h3>Resumen de diferencias por Convenio</h3>
+    <div id="tb-conv-resumen"></div>
   </div>
   <div class="card"><h3>Aportes de insumos — Teórico vs Real por lote</h3>
     <div style="overflow-x:auto"><table><thead><tr>
@@ -2596,6 +2775,48 @@ loadFromSheets();
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',9,true)">Real B</th>
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-retvsap',10,true)">Dif B</th>
     </tr></thead><tbody id="tb-retvsap"></tbody></table></div>
+  </div>
+</div>
+
+<!-- FACTURACION -->
+<div id="page-facturacion" class="page">
+  <div class="kpi-row" id="kpi-fact"></div>
+  <div class="filters">
+    <div><label>Contratista</label><select id="ff-cont" onchange="renderFacturacion()"><option value="">Todos</option></select></div>
+    <div><label>Lote</label><select id="ff-lote" onchange="renderFacturacion()"><option value="">Todos</option></select></div>
+    <div><label>Tipo Labor</label><select id="ff-tipo" onchange="renderFacturacion()"><option value="">Todos</option></select></div>
+    <div><label>Estado</label><select id="ff-estado" onchange="renderFacturacion()">
+      <option value="">Todos</option>
+      <option value="pendiente" selected>Pendiente</option>
+      <option value="facturado">Facturado</option>
+    </select></div>
+    <button class="btn-cl" onclick="clrF(['ff-cont','ff-lote','ff-tipo'],renderFacturacion)">✕ Limpiar</button>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <h3>🧾 Pendiente de facturar por Contratista</h3>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th onclick="sortTable('tb-fact-cont',0)" style="cursor:pointer">Contratista</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-cont',1,true)">Labores pendientes</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-cont',2,true)">Ha pendientes</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-cont',3,true)">Monto $ pendiente</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-cont',4,true)">Monto U$D pendiente</th>
+    </tr></thead><tbody id="tb-fact-cont"></tbody></table></div>
+  </div>
+  <div class="card">
+    <h3>Detalle de labores</h3>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th onclick="sortTable('tb-fact-det',0)" style="cursor:pointer">Fecha</th>
+      <th onclick="sortTable('tb-fact-det',1)" style="cursor:pointer">Contratista</th>
+      <th onclick="sortTable('tb-fact-det',2)" style="cursor:pointer">Tipo Labor</th>
+      <th onclick="sortTable('tb-fact-det',3)" style="cursor:pointer">Lote</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',4,true)">Ha Totales</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',5,true)">$/Ha</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',6,true)">U$D/Ha</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',7,true)">Monto $</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',8,true)">Monto U$D</th>
+      <th onclick="sortTable('tb-fact-det',9)" style="cursor:pointer">Estado</th>
+      <th onclick="sortTable('tb-fact-det',10)" style="cursor:pointer">N° Factura</th>
+    </tr></thead><tbody id="tb-fact-det"></tbody></table></div>
   </div>
 </div>
 
