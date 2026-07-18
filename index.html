@@ -1078,6 +1078,21 @@ function renderRetirosVsAportes(){
       <td style="text-align:right;font-weight:700;color:${dB>=0?"#059669":"#DC2626"}">${hB?(dB>=0?"+":"")+fmt(dB,2):"—"}</td>
     </tr>`;
   }).join("") : `<tr><td colspan="11" style="text-align:center;color:#6b7280;padding:16px">Sin datos — actualizá desde Google Sheets</td></tr>`;
+
+  if(rows.length){
+    const totDifA = totRealA - totTeoA;
+    const totDifB = totRealB - totTeoB;
+    ge("tb-retvsap").innerHTML += `<tr style="background:#F0DFA0;font-weight:800">
+      <td colspan="4">TOTAL</td>
+      <td style="text-align:right">${fmt(totTeoA,2)}</td>
+      <td style="text-align:right">${fmt(totRealA,2)}</td>
+      <td style="text-align:right;color:${totDifA>=0?"#059669":"#DC2626"}">${(totDifA>=0?"+":"")+fmt(totDifA,2)}</td>
+      <td colspan="1"></td>
+      <td style="text-align:right">${fmt(totTeoB,2)}</td>
+      <td style="text-align:right">${fmt(totRealB,2)}</td>
+      <td style="text-align:right;color:${totDifB>=0?"#059669":"#DC2626"}">${(totDifB>=0?"+":"")+fmt(totDifB,2)}</td>
+    </tr>`;
+  }
 }
 
 
@@ -1098,6 +1113,13 @@ let CONDICIONES_GEA_DETALLE = [];
 let FACTURACION_DATA = [];
 
 let cosechaLotesSel = new Set();
+let cosConvSel = new Set();
+
+function toggleCosConv(cv){
+  if(cosConvSel.has(cv)) cosConvSel.delete(cv);
+  else cosConvSel.add(cv);
+  renderCosecha();
+}
 
 function toggleCosechaLote(lote){
   if(cosechaLotesSel.has(lote)) cosechaLotesSel.delete(lote);
@@ -1108,13 +1130,26 @@ function toggleCosechaLote(lote){
 function renderCosecha(){
   const grano = ge("fcos-grano")?.value||"";
   const tit   = ge("fcos-tit")?.value||"";
-  const conv  = ge("fcos-conv")?.value||"";
   const dest  = ge("fcos-dest")?.value||"";
 
   popSel("fcos-grano", COSECHA_DATA.map(c=>c.grano));
   popSel("fcos-tit",   COSECHA_DATA.filter(c=>c.titular).map(c=>c.titular));
-  popSel("fcos-conv",  COSECHA_DATA.filter(c=>c.convenio).map(c=>c.convenio));
   popSel("fcos-dest",  COSECHA_DATA.filter(c=>c.destino).map(c=>c.destino));
+
+  // Chips de Convenio (multi-selección: 1, 2 o más)
+  const allConvCos = [...new Set(COSECHA_DATA.filter(c=>c.convenio).map(c=>c.convenio))].sort();
+  const convChipsEl = ge("fcos-conv-chips");
+  if(convChipsEl){
+    convChipsEl.innerHTML = "";
+    allConvCos.forEach(function(cv){
+      const sel = cosConvSel.has(cv);
+      const span = document.createElement("span");
+      span.textContent = (sel ? "✓ " : "") + cv;
+      span.style.cssText = "cursor:pointer;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;display:inline-block;margin:2px;background:" + (sel ? "#1A3C2E" : "#EDE9E1") + ";color:" + (sel ? "#C9A84C" : "#1a1a1a");
+      span.onclick = (function(cv2){ return function(){ toggleCosConv(cv2); }; })(cv);
+      convChipsEl.appendChild(span);
+    });
+  }
 
   // Build lote chips
   const allLotes = [...new Set(COSECHA_DATA.map(c=>c.campo))].sort();
@@ -1134,7 +1169,7 @@ function renderCosecha(){
     const f = COSECHA_DATA.filter(c=>
     (!grano||c.grano===grano) &&
     (!tit  ||c.titular===tit) &&
-    (!conv ||c.convenio===conv) &&
+    (cosConvSel.size===0||cosConvSel.has(c.convenio)) &&
     (!dest ||c.destino===dest) &&
     (cosechaLotesSel.size===0||cosechaLotesSel.has(c.campo))
   ).sort((a,b)=>b.fecha.localeCompare(a.fecha));
@@ -1788,6 +1823,19 @@ function renderFacturacion(){
       <td style="font-size:11px">${x.nro_factura||"—"}</td>
     </tr>`;
   }).join("") : `<tr><td colspan="14" style="text-align:center;color:#6b7280;padding:16px">Sin datos — actualizá desde Google Sheets</td></tr>`;
+
+  if(f.length){
+    const totHaHector   = f.reduce((a,x)=>a+x.ha_hector,0);
+    const totHaSucesion = f.reduce((a,x)=>a+x.ha_sucesion,0);
+    const totHaJavier   = f.reduce((a,x)=>a+x.ha_javier,0);
+    ge("tb-fact-det").innerHTML += `<tr style="background:#F0DFA0;font-weight:800">
+      <td colspan="5">TOTAL</td>
+      <td style="text-align:right;background:#EEF7F2">${fmt(totHaHector,1)}</td>
+      <td style="text-align:right;background:#DCE9F5">${fmt(totHaSucesion,1)}</td>
+      <td style="text-align:right;background:#FBF3E0">${fmt(totHaJavier,1)}</td>
+      <td colspan="6"></td>
+    </tr>`;
+  }
 }
 
 // ── VENTAS ────────────────────────────────────────────────────────────────────
@@ -2828,9 +2876,9 @@ loadFromSheets();
       <th onclick="sortTable('tb-fact-det',2)" style="cursor:pointer">Tipo Labor</th>
       <th onclick="sortTable('tb-fact-det',3)" style="cursor:pointer">Lote</th>
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',4,true)">Ha Totales</th>
-      <th style="text-align:right;cursor:pointer;background:#EEF7F2" onclick="sortTable('tb-fact-det',5,true)">Ha Héctor</th>
-      <th style="text-align:right;cursor:pointer;background:#DCE9F5" onclick="sortTable('tb-fact-det',6,true)">Ha Sucesión</th>
-      <th style="text-align:right;cursor:pointer;background:#FBF3E0" onclick="sortTable('tb-fact-det',7,true)">Ha Javier</th>
+      <th style="text-align:right;cursor:pointer;background:#EEF7F2;color:#1A3C2E" onclick="sortTable('tb-fact-det',5,true)">Ha Héctor</th>
+      <th style="text-align:right;cursor:pointer;background:#DCE9F5;color:#1A3C2E" onclick="sortTable('tb-fact-det',6,true)">Ha Sucesión</th>
+      <th style="text-align:right;cursor:pointer;background:#FBF3E0;color:#1A3C2E" onclick="sortTable('tb-fact-det',7,true)">Ha Javier</th>
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',8,true)">$/Ha</th>
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',9,true)">U$D/Ha</th>
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',10,true)">Monto $</th>
@@ -2847,9 +2895,12 @@ loadFromSheets();
   <div class="filters">
     <div><label>Grano</label><select id="fcos-grano" onchange="renderCosecha()"><option value="">Todos</option></select></div>
     <div><label>Titular</label><select id="fcos-tit" onchange="renderCosecha()"><option value="">Todos</option></select></div>
-    <div><label>Convenio</label><select id="fcos-conv" onchange="renderCosecha()"><option value="">Todos</option></select></div>
     <div><label>Destino</label><select id="fcos-dest" onchange="renderCosecha()"><option value="">Todos</option></select></div>
-    <button class="btn-cl" onclick="clrF(['fcos-grano','fcos-tit','fcos-conv','fcos-dest'],function(){cosechaLotesSel.clear();renderCosecha();})">✕ Limpiar</button>
+    <button class="btn-cl" onclick="clrF(['fcos-grano','fcos-tit','fcos-dest'],function(){cosechaLotesSel.clear();cosConvSel.clear();renderCosecha();})">✕ Limpiar</button>
+  </div>
+  <div style="margin:-6px 0 10px">
+    <label style="font-size:11px;color:#6b7280;font-weight:700;display:block;margin-bottom:4px">Convenio (elegí uno o varios — sin elegir ninguno se ven todos)</label>
+    <div id="fcos-conv-chips"></div>
   </div>
   <!-- Multi-select lotes -->
   <div style="background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,0.06)">
