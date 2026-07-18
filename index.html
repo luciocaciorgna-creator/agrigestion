@@ -1710,6 +1710,7 @@ function showExtracDetalle(silobolsa, grano){
 // ── FACTURACIÓN ────────────────────────────────────────────────────────────────
 function renderFacturacion(){
   const cont   = ge("ff-cont")?.value||"";
+  const prod   = ge("ff-prod")?.value||"";
   const loteF  = ge("ff-lote")?.value||"";
   const tipoF  = ge("ff-tipo")?.value||"";
   const estado = ge("ff-estado")?.value||"";
@@ -1718,11 +1719,19 @@ function renderFacturacion(){
   popSel("ff-lote", FACTURACION_DATA.map(f=>f.lote));
   popSel("ff-tipo", FACTURACION_DATA.map(f=>f.tipo));
 
+  const prodTieneHa = (x)=>{
+    if(prod==="CACIORGNA HECTOR") return x.ha_hector>0;
+    if(prod==="SUCESION CACIORGNA RAUL") return x.ha_sucesion>0;
+    if(prod==="PELIZZA JAVIER") return x.ha_javier>0;
+    return true;
+  };
+
   const f = FACTURACION_DATA.filter(x=>
     (!cont ||x.contratista===cont) &&
     (!loteF||x.lote===loteF) &&
     (!tipoF||x.tipo===tipoF) &&
-    (!estado || (estado==="pendiente" ? !x.facturado : x.facturado))
+    (!estado || (estado==="pendiente" ? !x.facturado : x.facturado)) &&
+    prodTieneHa(x)
   ).map(x=>({...x, monto_ars:x.ha_totales*x.precio_ars_ha, monto_usd:x.ha_totales*x.precio_usd_ha}))
    .sort((a,b)=>b.fecha.localeCompare(a.fecha));
 
@@ -1739,7 +1748,7 @@ function renderFacturacion(){
 
   // ── Resumen por Contratista (siempre sobre lo PENDIENTE, sin importar el filtro de Estado) ──
   const baseContratista = FACTURACION_DATA.filter(x=>
-    (!cont ||x.contratista===cont) && (!loteF||x.lote===loteF) && (!tipoF||x.tipo===tipoF) && !x.facturado
+    (!cont ||x.contratista===cont) && (!loteF||x.lote===loteF) && (!tipoF||x.tipo===tipoF) && !x.facturado && prodTieneHa(x)
   );
   const porCont = {};
   baseContratista.forEach(x=>{
@@ -1766,6 +1775,9 @@ function renderFacturacion(){
       <td><span class="badge bg-verde">${x.tipo||"—"}</span></td>
       <td>${x.lote}</td>
       <td style="text-align:right">${fmt(x.ha_totales,1)}</td>
+      <td style="text-align:right;background:#F5FBF8">${x.ha_hector>0?fmt(x.ha_hector,1):"—"}</td>
+      <td style="text-align:right;background:#F5F8FC">${x.ha_sucesion>0?fmt(x.ha_sucesion,1):"—"}</td>
+      <td style="text-align:right;background:#FDF8ED">${x.ha_javier>0?fmt(x.ha_javier,1):"—"}</td>
       <td style="text-align:right">${x.precio_ars_ha?fmtP(x.precio_ars_ha):"—"}</td>
       <td style="text-align:right">${x.precio_usd_ha?fmtU(x.precio_usd_ha):"—"}</td>
       <td style="text-align:right">${x.monto_ars>0?fmtP(x.monto_ars):"—"}</td>
@@ -1775,7 +1787,7 @@ function renderFacturacion(){
         : '<span class="badge" style="background:#FEF3C7;color:#B45309">Pendiente</span>'}</td>
       <td style="font-size:11px">${x.nro_factura||"—"}</td>
     </tr>`;
-  }).join("") : `<tr><td colspan="11" style="text-align:center;color:#6b7280;padding:16px">Sin datos — actualizá desde Google Sheets</td></tr>`;
+  }).join("") : `<tr><td colspan="14" style="text-align:center;color:#6b7280;padding:16px">Sin datos — actualizá desde Google Sheets</td></tr>`;
 }
 
 // ── VENTAS ────────────────────────────────────────────────────────────────────
@@ -2783,6 +2795,12 @@ loadFromSheets();
   <div class="kpi-row" id="kpi-fact"></div>
   <div class="filters">
     <div><label>Contratista</label><select id="ff-cont" onchange="renderFacturacion()"><option value="">Todos</option></select></div>
+    <div><label>Productor</label><select id="ff-prod" onchange="renderFacturacion()">
+      <option value="">Todos</option>
+      <option value="CACIORGNA HECTOR">CACIORGNA HECTOR</option>
+      <option value="SUCESION CACIORGNA RAUL">SUCESION CACIORGNA RAUL</option>
+      <option value="PELIZZA JAVIER">PELIZZA JAVIER</option>
+    </select></div>
     <div><label>Lote</label><select id="ff-lote" onchange="renderFacturacion()"><option value="">Todos</option></select></div>
     <div><label>Tipo Labor</label><select id="ff-tipo" onchange="renderFacturacion()"><option value="">Todos</option></select></div>
     <div><label>Estado</label><select id="ff-estado" onchange="renderFacturacion()">
@@ -2790,7 +2808,7 @@ loadFromSheets();
       <option value="pendiente" selected>Pendiente</option>
       <option value="facturado">Facturado</option>
     </select></div>
-    <button class="btn-cl" onclick="clrF(['ff-cont','ff-lote','ff-tipo'],renderFacturacion)">✕ Limpiar</button>
+    <button class="btn-cl" onclick="clrF(['ff-cont','ff-prod','ff-lote','ff-tipo'],renderFacturacion)">✕ Limpiar</button>
   </div>
   <div class="card" style="margin-bottom:14px">
     <h3>🧾 Pendiente de facturar por Contratista</h3>
@@ -2810,12 +2828,15 @@ loadFromSheets();
       <th onclick="sortTable('tb-fact-det',2)" style="cursor:pointer">Tipo Labor</th>
       <th onclick="sortTable('tb-fact-det',3)" style="cursor:pointer">Lote</th>
       <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',4,true)">Ha Totales</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',5,true)">$/Ha</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',6,true)">U$D/Ha</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',7,true)">Monto $</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',8,true)">Monto U$D</th>
-      <th onclick="sortTable('tb-fact-det',9)" style="cursor:pointer">Estado</th>
-      <th onclick="sortTable('tb-fact-det',10)" style="cursor:pointer">N° Factura</th>
+      <th style="text-align:right;cursor:pointer;background:#EEF7F2" onclick="sortTable('tb-fact-det',5,true)">Ha Héctor</th>
+      <th style="text-align:right;cursor:pointer;background:#DCE9F5" onclick="sortTable('tb-fact-det',6,true)">Ha Sucesión</th>
+      <th style="text-align:right;cursor:pointer;background:#FBF3E0" onclick="sortTable('tb-fact-det',7,true)">Ha Javier</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',8,true)">$/Ha</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',9,true)">U$D/Ha</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',10,true)">Monto $</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-det',11,true)">Monto U$D</th>
+      <th onclick="sortTable('tb-fact-det',12)" style="cursor:pointer">Estado</th>
+      <th onclick="sortTable('tb-fact-det',13)" style="cursor:pointer">N° Factura</th>
     </tr></thead><tbody id="tb-fact-det"></tbody></table></div>
   </div>
 </div>
