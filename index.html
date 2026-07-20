@@ -1183,6 +1183,16 @@ function renderConvenioComposicion(grano, tit, dest){
   const pactadaPct = {};
   productores.forEach(p=>{ pactadaPct[p] = totalTeo>0 ? (teoPorProd[p]/totalTeo*100) : 0; });
 
+  // Hectáreas por productor: se suman las ha de cada LOTE (una sola vez por lote,
+  // no por cada viaje) multiplicadas por el % que le corresponde a cada uno.
+  const camposConv = new Set(rowsConv.map(c=>c.campo));
+  const haPorProd = {}; productores.forEach(p=>haPorProd[p]=0);
+  camposConv.forEach(campo=>{
+    const haLote = LOTES_HA_MAP[campo]||0;
+    const prodsDef = LOTES_PROD_MAP[campo]||[];
+    prodsDef.forEach(([prod,pct])=>{ if(haPorProd.hasOwnProperty(prod)) haPorProd[prod]+=haLote*pct/100; });
+  });
+
   // Retiros reales por productor (según titular del CP), sobre TODO el convenio
   const PROD_NORM = {
     "SUCESION CACIORGNA RAUL ":"SUCESION CACIORGNA RAUL",
@@ -1202,7 +1212,7 @@ function renderConvenioComposicion(grano, tit, dest){
     return `<div style="width:${w}%;background:${prodColors[p]||"#888"};display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800">${w>=8?fmt(w,0)+"%":""}</div>`;
   }).join("");
   ge("comp-pactada-legend").innerHTML = productores.map(p=>
-    `<span><span class="dot" style="background:${prodColors[p]||"#888"}"></span>${p} ${fmt(pactadaPct[p],0)}%</span>`
+    `<span><span class="dot" style="background:${prodColors[p]||"#888"}"></span>${p} ${fmt(pactadaPct[p],0)}% · ${fmt(haPorProd[p],1)} ha</span>`
   ).join("");
 
   // Retiros reales: una barra por productor (escala 0-100%), con marca de la pactada
@@ -1212,10 +1222,15 @@ function renderConvenioComposicion(grano, tit, dest){
     const cerca = Math.abs(dif)<0.5;
     const difColor = cerca ? "#6b7280" : (dif>0?"#059669":"#DC2626");
     const difTxt = cerca ? "±0,0%" : (dif>0?"+":"")+fmt(dif,1)+"%";
+    // Diferencia en kg: real vs lo que "correspondería" si estuviera exactamente
+    // en el % pactado sobre el total real retirado del convenio.
+    const esperadoKg = totalReal * pactadaPct[p]/100;
+    const difKg = realPorProd[p] - esperadoKg;
+    const difKgTxt = Math.abs(difKg)<1 ? "±0 kg" : (difKg>0?"+":"")+fmt(difKg,0)+" kg";
     return `<div style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:800;color:#1A3C2E;margin-bottom:4px">
         <span>${p}</span>
-        <span>${fmt(realPorProd[p]/1000,1)} tn (${fmt(realPct,1)}%) <span style="color:${difColor}">${difTxt}</span></span>
+        <span>${fmt(realPorProd[p]/1000,1)} tn (${fmt(realPct,1)}%) <span style="color:${difColor}">${difTxt} · ${difKgTxt}</span></span>
       </div>
       <div style="position:relative;height:14px;background:#EDE9E1;border-radius:7px;overflow:hidden">
         <div style="position:absolute;left:0;top:0;bottom:0;width:${realPct}%;background:${prodColors[p]||"#888"};border-radius:7px"></div>
@@ -1247,6 +1262,11 @@ function renderConvenioComposicion(grano, tit, dest){
     const pactPct0 = teoTot>0?((g.teo[p0]||0)/teoTot*100):pct0;
     const dif0 = pct0-pactPct0;
     const cerca0 = Math.abs(dif0)<0.5;
+    // Diferencia en kg: real vs lo que correspondería si estuviera exactamente en
+    // el % pactado sobre el total real de este grano.
+    const esperado0 = totReal * pactPct0/100;
+    const difKg0 = real0 - esperado0;
+    const difKg0Txt = Math.abs(difKg0)<1 ? "±0 kg" : (difKg0>0?"+":"")+(Math.abs(difKg0)>=1000?fmt(difKg0/1000,2)+" tn":fmt(difKg0,0)+" kg");
     return `<div style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
         <span style="font-size:12px;font-weight:800;color:#1A3C2E">${g.grano}</span>
@@ -1258,7 +1278,7 @@ function renderConvenioComposicion(grano, tit, dest){
         <div style="position:absolute;left:${pactPct0}%;top:-3px;bottom:-3px;width:2px;background:#1a1a1a"></div>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:10px;color:#6b7280;margin-top:3px">
-        <span>${nombreCorto(p0)} ${fmt(pct0,0)}% (${fmt(real0/1000,1)} tn) <span style="color:${cerca0?"#6b7280":(dif0>0?"#059669":"#DC2626")}">Dif: ${dif0>=0?"+":""}${fmt(dif0,1)}%</span></span>
+        <span>${nombreCorto(p0)} ${fmt(pct0,0)}% (${fmt(real0/1000,1)} tn) <span style="color:${cerca0?"#6b7280":(dif0>0?"#059669":"#DC2626")}">Dif: ${dif0>=0?"+":""}${fmt(dif0,1)}% · ${difKg0Txt}</span></span>
         ${p1?`<span>${nombreCorto(p1)} ${fmt(pct1,0)}% (${fmt(real1/1000,1)} tn)</span>`:""}
       </div>
     </div>`;
