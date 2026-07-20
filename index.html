@@ -1184,13 +1184,14 @@ function renderConvenioComposicion(grano, tit, dest){
   productores.forEach(p=>{ pactadaPct[p] = totalTeo>0 ? (teoPorProd[p]/totalTeo*100) : 0; });
 
   // Hectáreas por productor: se suman las ha de cada LOTE (una sola vez por lote,
-  // no por cada viaje) multiplicadas por el % que le corresponde a cada uno.
-  const camposConv = new Set(rowsConv.map(c=>c.campo));
+  // no por cada viaje) multiplicadas por el % que le corresponde a cada uno. Se usa
+  // c.ha y c.neto_prods (ya vienen calculados en cada fila de COSECHA_DATA) en vez
+  // de LOTES_HA_MAP/LOTES_PROD_MAP, que son variables internas de otra función.
+  const camposConv = new Map();
+  rowsConv.forEach(c=>{ if(!camposConv.has(c.campo)) camposConv.set(c.campo, {ha:c.ha||0, neto_prods:c.neto_prods||[]}); });
   const haPorProd = {}; productores.forEach(p=>haPorProd[p]=0);
-  camposConv.forEach(campo=>{
-    const haLote = LOTES_HA_MAP[campo]||0;
-    const prodsDef = LOTES_PROD_MAP[campo]||[];
-    prodsDef.forEach(([prod,pct])=>{ if(haPorProd.hasOwnProperty(prod)) haPorProd[prod]+=haLote*pct/100; });
+  camposConv.forEach(info=>{
+    info.neto_prods.forEach(p=>{ if(haPorProd.hasOwnProperty(p.prod)) haPorProd[p.prod]+=info.ha*p.pct/100; });
   });
 
   // Retiros reales por productor (según titular del CP), sobre TODO el convenio
