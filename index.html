@@ -1127,10 +1127,150 @@ function toggleCosechaLote(lote){
   renderCosecha();
 }
 
+// Nombre corto para mostrar en espacios chicos (barras de repartija)
+function nombreCorto(p){
+  if(!p) return "—";
+  if(p.includes("SUCESION")) return "SUCESIÓN";
+  const partes = p.trim().split(" ");
+  return partes[partes.length-1];
+}
+
+// ── Composición del convenio y repartija por productor ──────────────────────
+function renderConvenioComposicion(grano, tit, dest){
+  const conveniosDisp = [...new Set(COSECHA_DATA.map(c=>c.convenio))].filter(Boolean).sort();
+  const selEl = ge("fcos-comp-conv");
+  if(!selEl) return;
+  if(selEl.dataset.filled!=="1" && conveniosDisp.length){
+    selEl.innerHTML = conveniosDisp.map(c=>`<option value="${c}">${c}</option>`).join("");
+    selEl.dataset.filled = "1";
+  }
+  if(conveniosDisp.length===0) return;
+  const convenioActivo = selEl.value || conveniosDisp[0];
+  // Mismos filtros que el resto de la pestaña (Grano/Titular/Destino/Lotes). No se
+  // excluyen las filas BOLSON (así el lote sigue apareciendo aunque todavía no haya
+  // extraído nada de su silobolsa) — en cambio, su aporte a los kg netos se pone en
+  // 0 más abajo (netosOfConv) para no contar el mismo grano dos veces.
+  const rowsConv = COSECHA_DATA.filter(c=>
+    c.convenio===convenioActivo &&
+    (!grano||c.grano===grano) &&
+    (!tit  ||c.titular===tit) &&
+    (!dest ||c.destino===dest) &&
+    (cosechaLotesSel.size===0||cosechaLotesSel.has(c.campo))
+  );
+  const netosOfConv = c => String(c.destino||"").toUpperCase().startsWith("BOLSON") ? 0 : c.kg_netos;
+
+  const productoresSet = new Set();
+  rowsConv.forEach(c=>(c.neto_prods||[]).forEach(p=>productoresSet.add(p.prod)));
+  const productores = [...productoresSet];
+  const prodColors = PC;
+
+  if(productores.length===0){
+    ge("comp-pactada-bar").innerHTML = "";
+    ge("comp-pactada-legend").innerHTML = "";
+    ge("comp-real-bars").innerHTML = '<div style="color:#6b7280;font-size:12px">Sin datos para este convenio todavía.</div>';
+    ge("comp-cultivo-bars").innerHTML = "";
+    return;
+  }
+
+  // Participación pactada, ponderada por kg teóricos totales del convenio
+  let totalTeo = 0;
+  const teoPorProd = {}; productores.forEach(p=>teoPorProd[p]=0);
+  rowsConv.forEach(c=>{
+    const kn = netosOfConv(c);
+    totalTeo += kn;
+    (c.neto_prods||[]).forEach(p=>{ teoPorProd[p.prod] = (teoPorProd[p.prod]||0) + kn*p.pct/100; });
+  });
+  const pactadaPct = {};
+  productores.forEach(p=>{ pactadaPct[p] = totalTeo>0 ? (teoPorProd[p]/totalTeo*100) : 0; });
+
+  // Retiros reales por productor (según titular del CP), sobre TODO el convenio
+  const PROD_NORM = {
+    "SUCESION CACIORGNA RAUL ":"SUCESION CACIORGNA RAUL",
+    "Sucesión Caciorgna Raúl":"SUCESION CACIORGNA RAUL",
+    "CACIORGNA HECTOR ":"CACIORGNA HECTOR"
+  };
+  const realPorProd = {}; productores.forEach(p=>realPorProd[p]=0);
+  let totalReal = 0;
+  rowsConv.forEach(c=>{
+    const tit2 = PROD_NORM[c.titular]||c.titular;
+    if(tit2 && realPorProd.hasOwnProperty(tit2)){ const kn=netosOfConv(c); realPorProd[tit2]+=kn; totalReal+=kn; }
+  });
+
+  // Barra segmentada "Participación pactada"
+  ge("comp-pactada-bar").innerHTML = productores.map(p=>{
+    const w = pactadaPct[p];
+    return `<div style="width:${w}%;background:${prodColors[p]||"#888"};display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800">${w>=8?fmt(w,0)+"%":""}</div>`;
+  }).join("");
+  ge("comp-pactada-legend").innerHTML = productores.map(p=>
+    `<span><span class="dot" style="background:${prodColors[p]||"#888"}"></span>${p} ${fmt(pactadaPct[p],0)}%</span>`
+  ).join("");
+
+  // Retiros reales: una barra por productor (escala 0-100%), con marca de la pactada
+  ge("comp-real-bars").innerHTML = productores.map(p=>{
+    const realPct = totalReal>0 ? (realPorProd[p]/totalReal*100) : 0;
+    const dif = realPct - pactadaPct[p];
+    const cerca = Math.abs(dif)<0.5;
+    const difColor = cerca ? "#6b7280" : (dif>0?"#059669":"#DC2626");
+    const difTxt = cerca ? "±0,0%" : (dif>0?"+":"")+fmt(dif,1)+"%";
+    return `<div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:800;color:#1A3C2E;margin-bottom:4px">
+        <span>${p}</span>
+        <span>${fmt(realPorProd[p]/1000,1)} tn (${fmt(realPct,1)}%) <span style="color:${difColor}">${difTxt}</span></span>
+      </div>
+      <div style="position:relative;height:14px;background:#EDE9E1;border-radius:7px;overflow:hidden">
+        <div style="position:absolute;left:0;top:0;bottom:0;width:${realPct}%;background:${prodColors[p]||"#888"};border-radius:7px"></div>
+        <div style="position:absolute;left:${pactadaPct[p]}%;top:-3px;bottom:-3px;width:2px;background:#1a1a1a"></div>
+      </div>
+    </div>`;
+  }).join("");
+
+  // Repartija por cultivo (grano): real vs pactada, entre los 2 productores del convenio
+  const granoMap = {};
+  rowsConv.forEach(c=>{
+    if(!granoMap[c.grano]) granoMap[c.grano] = {grano:c.grano, teo:{}, real:{}, totalTeo:0, totalReal:0};
+    const g = granoMap[c.grano];
+    const kn = netosOfConv(c);
+    g.totalTeo += kn;
+    (c.neto_prods||[]).forEach(p=>{ g.teo[p.prod] = (g.teo[p.prod]||0) + kn*p.pct/100; });
+    const tit2 = PROD_NORM[c.titular]||c.titular;
+    if(tit2 && productores.includes(tit2)){ g.real[tit2] = (g.real[tit2]||0) + kn; g.totalReal += kn; }
+  });
+  const granoRows = Object.values(granoMap).filter(g=>g.totalReal>0||g.totalTeo>0).sort((a,b)=>b.totalTeo-a.totalTeo);
+
+  ge("comp-cultivo-bars").innerHTML = granoRows.length ? granoRows.map(g=>{
+    const p0=productores[0], p1=productores[1];
+    const real0 = g.real[p0]||0, real1 = p1?(g.real[p1]||0):0;
+    const totReal = real0+real1;
+    const pct0 = totReal>0?(real0/totReal*100):100;
+    const pct1 = 100-pct0;
+    const teoTot = (g.teo[p0]||0)+(p1?(g.teo[p1]||0):0);
+    const pactPct0 = teoTot>0?((g.teo[p0]||0)/teoTot*100):pct0;
+    const dif0 = pct0-pactPct0;
+    const cerca0 = Math.abs(dif0)<0.5;
+    return `<div style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+        <span style="font-size:12px;font-weight:800;color:#1A3C2E">${g.grano}</span>
+        <span style="font-size:11px;color:#6b7280">${fmt((totReal||teoTot)/1000,1)} tn total</span>
+      </div>
+      <div style="position:relative;height:14px;border-radius:7px;overflow:hidden;display:flex;background:#EDE9E1">
+        <div style="width:${pct0}%;background:${prodColors[p0]||"#888"}"></div>
+        ${p1?`<div style="width:${pct1}%;background:${prodColors[p1]||"#C9A84C"}"></div>`:""}
+        <div style="position:absolute;left:${pactPct0}%;top:-3px;bottom:-3px;width:2px;background:#1a1a1a"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:#6b7280;margin-top:3px">
+        <span>${nombreCorto(p0)} ${fmt(pct0,0)}% (${fmt(real0/1000,1)} tn) <span style="color:${cerca0?"#6b7280":(dif0>0?"#059669":"#DC2626")}">Dif: ${dif0>=0?"+":""}${fmt(dif0,1)}%</span></span>
+        ${p1?`<span>${nombreCorto(p1)} ${fmt(pct1,0)}% (${fmt(real1/1000,1)} tn)</span>`:""}
+      </div>
+    </div>`;
+  }).join("") : '<div style="color:#6b7280;font-size:12px">Sin datos por cultivo para este convenio.</div>';
+}
+
 function renderCosecha(){
   const grano = ge("fcos-grano")?.value||"";
   const tit   = ge("fcos-tit")?.value||"";
   const dest  = ge("fcos-dest")?.value||"";
+
+  renderConvenioComposicion(grano, tit, dest);
 
   popSel("fcos-grano", COSECHA_DATA.map(c=>c.grano));
   popSel("fcos-tit",   COSECHA_DATA.filter(c=>c.titular).map(c=>c.titular));
@@ -2428,7 +2568,7 @@ async function loadFromSheets() {
     const LOTES_HA_MAP = {PICAPIEDRA:72,ARBOLITO:70,"RAFAEL OBLIGADO":145,BRETES:42,
       "FICARDI BAJO":40,BALIEN:12,"FICARDI LOMA":40,OMBU:4,"CHACRA DERECHA":30,
       PRIANO:20,"CHACRA IZQUIERDA":30,MANGRULLO:14,PATRICIA:33,REBISSO:30,
-      NELIDA:28,PARRA:27,MAROTTA:10,SIGNIFREDI:36,"SIGNIFREDI 15":19,"LOS INDIOS":0};
+      NELIDA:28,PARRA:27,MAROTTA:10,SIGNIFREDI:36,"SIGNIFREDI 15":19};
     const LOTES_CONV_MAP = {
       PICAPIEDRA:"Caciorgna Hector y Pelizza Javier",ARBOLITO:"Caciorgna Hector y Pelizza Javier",
       "RAFAEL OBLIGADO":"Caciorgna Hector y Pelizza Javier",
@@ -2442,7 +2582,7 @@ async function loadFromSheets() {
       MANGRULLO:"Sucesion Caciorgna Raul",PATRICIA:"Caciorgna Hector",
       REBISSO:"Caciorgna Hector",NELIDA:"Caciorgna Hector",PARRA:"Caciorgna Hector",
       MAROTTA:"Caciorgna Hector",SIGNIFREDI:"Caciorgna Hector",
-      "SIGNIFREDI 15":"Caciorgna Hector","LOS INDIOS":"Caciorgna Hector"};
+      "SIGNIFREDI 15":"Caciorgna Hector"};
     const LOTES_PROD_MAP = {
       PICAPIEDRA:[["CACIORGNA HECTOR",50],["PELIZZA JAVIER",50]],
       ARBOLITO:[["CACIORGNA HECTOR",50],["PELIZZA JAVIER",50]],
@@ -2459,7 +2599,7 @@ async function loadFromSheets() {
       PATRICIA:[["CACIORGNA HECTOR",100]],REBISSO:[["CACIORGNA HECTOR",100]],
       NELIDA:[["CACIORGNA HECTOR",100]],PARRA:[["CACIORGNA HECTOR",100]],
       MAROTTA:[["CACIORGNA HECTOR",100]],SIGNIFREDI:[["CACIORGNA HECTOR",100]],
-      "SIGNIFREDI 15":[["CACIORGNA HECTOR",100]],"LOS INDIOS":[["CACIORGNA HECTOR",100]]};
+      "SIGNIFREDI 15":[["CACIORGNA HECTOR",100]]};
     const CAMPO_NORM_MAP = {
       "Picapietra":"PICAPIEDRA","PICAPIETRA":"PICAPIEDRA","PICAPIEDRA":"PICAPIEDRA",
       "Balien":"BALIEN","BALIEN":"BALIEN",
@@ -2467,7 +2607,7 @@ async function loadFromSheets() {
       "Ficardi":"FICARDI LOMA","Ficardi Loma":"FICARDI LOMA","FICARDI LOMA":"FICARDI LOMA",
       "Ficardi Bajo":"FICARDI BAJO","FICARDI BAJO":"FICARDI BAJO",
       "Chacra":"CHACRA DERECHA","CHACRA DERECHA":"CHACRA DERECHA",
-      "CHACRA IZQUIERDA":"CHACRA IZQUIERDA",
+      "CHACRA IZQUIERDA":"CHACRA IZQUIERDA","Chacra Izquierda":"CHACRA IZQUIERDA",
       "Priano":"PRIANO","PRIANO":"PRIANO",
       "Mangrullo":"MANGRULLO","MANGRULLO":"MANGRULLO",
       "Marotta":"MAROTTA","MAROTTA":"MAROTTA",
@@ -2476,7 +2616,10 @@ async function loadFromSheets() {
       "Rebisso":"REBISSO","REBISSO":"REBISSO","REBISO":"REBISSO",
       "Sginifredi":"SIGNIFREDI","Signifredi":"SIGNIFREDI","SIGNIFREDI":"SIGNIFREDI",
       "Signifredi 15":"SIGNIFREDI 15","SIGNIFREDI 15":"SIGNIFREDI 15",
-      "Los Indios":"LOS INDIOS","LOS INDIOS":"LOS INDIOS",
+      // "Los Indios" es un nombre viejo del mismo lote que ahora se llama
+      // "Rafael Obligado" (145 ha) — se unifican los dos bajo un solo nombre.
+      "Los Indios":"RAFAEL OBLIGADO","LOS INDIOS":"RAFAEL OBLIGADO",
+      "Rafael Obligado":"RAFAEL OBLIGADO","RAFAEL OBLIGADO":"RAFAEL OBLIGADO",
       "ARBOLITO":"ARBOLITO","PATRICIA":"PATRICIA","OMBU":"OMBU",
       "MAROTTA":"MAROTTA","MANGRULLO":"MANGRULLO","BALIEN":"BALIEN"};
     const GRANOS_OK = new Set(["TRIGO","SOJA","MAIZ","MAIZ FLINT"]);
@@ -2507,29 +2650,37 @@ async function loadFromSheets() {
         inExtraccion = true;
         return;
       }
-      if(inExtraccion){
-        if(!extracHeaderSeen){
-          if(String(r[1]||"").trim().toUpperCase()==="FECHA") extracHeaderSeen = true;
-          return;
-        }
+      if(inExtraccion && !extracHeaderSeen){
+        if(String(r[1]||"").trim().toUpperCase()==="FECHA") extracHeaderSeen = true;
+        return;
+      }
+      if(inExtraccion && extracHeaderSeen){
         const silobolsa = String(r[2]||"").trim();
         const granoEx = String(r[4]||"").trim();
-        if(!silobolsa || !GRANOS_OK.has(granoEx)) return; // fin de la sección / fila no válida
-        extracRows.push({
-          fecha: parseFechaDMY(r[1]),
-          silobolsa, grano: granoEx,
-          variedad: String(r[3]||"").trim(),
-          destino: String(r[5]||"").trim(),
-          planta: String(r[6]||"").trim(),
-          titular: PROD_NORM_MAP[String(r[8]||"").trim()] || String(r[8]||"").trim(),
-          cp: r[9]?String(r[9]).trim():"",
-          camionero: String(r[11]||"").trim(),
-          kg_campo: parseNum(r[19]),
-          descarga: parseNum(r[20]),
-          merma_tot: parseNum(r[24]),
-          kg_netos: parseNum(r[25]),
-        });
-        return;
+        if(silobolsa && GRANOS_OK.has(granoEx)){
+          extracRows.push({
+            fecha: parseFechaDMY(r[1]),
+            silobolsa, grano: granoEx,
+            variedad: String(r[3]||"").trim(),
+            destino: String(r[5]||"").trim(),
+            planta: String(r[6]||"").trim(),
+            titular: PROD_NORM_MAP[String(r[8]||"").trim()] || String(r[8]||"").trim(),
+            cp: r[9]?String(r[9]).trim():"",
+            camionero: String(r[11]||"").trim(),
+            kg_campo: parseNum(r[19]),
+            descarga: parseNum(r[20]),
+            merma_tot: parseNum(r[24]),
+            kg_netos: parseNum(r[25]),
+          });
+          return;
+        }
+        // Esta fila ya no encaja con el patrón de extracción: se asume que la
+        // sección terminó acá (por ejemplo, si después se cargaron más filas de
+        // cosecha nueva debajo de "Extraccion silobolsa"). Se sale del modo
+        // extracción y esta misma fila se intenta procesar como cosecha normal
+        // más abajo, en vez de perderla para siempre.
+        inExtraccion = false;
+        extracHeaderSeen = false;
       }
       const campo_raw = String(r[2]||"").trim();
       const grano = String(r[4]||"").trim();
@@ -2908,6 +3059,24 @@ loadFromSheets();
   <div style="background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,0.06)">
     <div style="font-size:11px;font-weight:700;color:#6b7280;margin-bottom:8px">LOTES (selección múltiple)</div>
     <div id="fcos-lotes-chips" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+  </div>
+  <div class="grid2" style="margin-bottom:14px">
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <h3 style="margin:0">🤝 Participación pactada vs Retiros reales</h3>
+        <select id="fcos-comp-conv" onchange="renderConvenioComposicion()" style="margin-left:auto;padding:4px 10px;border-radius:6px;border:1px solid #ddd;font-size:12px"></select>
+      </div>
+      <div style="font-size:10px;font-weight:800;color:#9CA3AF;letter-spacing:0.5px;margin-bottom:6px">PARTICIPACIÓN PACTADA (ponderada por kg teóricos)</div>
+      <div id="comp-pactada-bar" style="height:26px;border-radius:6px;overflow:hidden;display:flex;margin-bottom:8px"></div>
+      <div id="comp-pactada-legend" style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;margin-bottom:18px"></div>
+      <div style="font-size:10px;font-weight:800;color:#9CA3AF;letter-spacing:0.5px;margin-bottom:10px">RETIROS REALES (kg netos)</div>
+      <div id="comp-real-bars"></div>
+    </div>
+    <div class="card">
+      <h3>🌾 Repartija por Cultivo</h3>
+      <p style="font-size:11px;color:#6b7280;margin:-4px 0 12px">La rayita negra marca el % pactado; el color muestra el % real retirado por cada uno.</p>
+      <div id="comp-cultivo-bars"></div>
+    </div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px">
     <div class="card"><h3>Kg Netos por campo</h3><div class="chart-wrap"><canvas id="ch-cos-campo"></canvas></div></div>
