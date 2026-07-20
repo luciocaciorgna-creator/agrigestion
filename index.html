@@ -1335,6 +1335,40 @@ function renderCosecha(){
     (cosechaLotesSel.size===0||cosechaLotesSel.has(c.campo))
   ).sort((a,b)=>b.fecha.localeCompare(a.fecha));
 
+  // ── Chart: Kg Netos Teórico vs Retirado, TOTAL por productor (todos los convenios) ──
+  const netosOfG = c => String(c.destino||"").toUpperCase().startsWith("BOLSON") ? 0 : c.kg_netos;
+  const PROD_NORM_G = {
+    "SUCESION CACIORGNA RAUL ":"SUCESION CACIORGNA RAUL",
+    "Sucesión Caciorgna Raúl":"SUCESION CACIORGNA RAUL",
+    "CACIORGNA HECTOR ":"CACIORGNA HECTOR"
+  };
+  const todosProductoresG = Object.keys(PC);
+  const teoGlobal = {}, realGlobal = {};
+  todosProductoresG.forEach(p=>{ teoGlobal[p]=0; realGlobal[p]=0; });
+  f.forEach(c=>{
+    const kn = netosOfG(c);
+    (c.neto_prods||[]).forEach(p=>{ if(teoGlobal.hasOwnProperty(p.prod)) teoGlobal[p.prod] += kn*p.pct/100; });
+    const tit3 = PROD_NORM_G[c.titular]||c.titular;
+    if(tit3 && realGlobal.hasOwnProperty(tit3)) realGlobal[tit3] += kn;
+  });
+  dC("ch-cos-teoreal-global");
+  charts["ch-cos-teoreal-global"] = new Chart(ge("ch-cos-teoreal-global"),{
+    type:"bar",
+    data:{
+      labels: todosProductoresG,
+      datasets:[
+        { label:"Kg Neto Teórico", data:todosProductoresG.map(p=>teoGlobal[p]/1000), backgroundColor:"#C9A84C", borderRadius:4 },
+        { label:"Kg Neto Retirado (real)", data:todosProductoresG.map(p=>realGlobal[p]/1000), backgroundColor:"#2D6A4F", borderRadius:4 }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:"bottom",labels:{font:{size:10}}},
+        tooltip:{callbacks:{label:ctx=>ctx.dataset.label+": "+fmt(ctx.raw,1)+" tn"}}},
+      scales:{y:{grid:{color:"#eee"},ticks:{callback:v=>fmt(v,0)+" tn"}},x:{ticks:{font:{size:11}}}}
+    }
+  });
+
   const totKgCampo = f.reduce((a,c)=>a+c.kg_campo,0);
   const totDescarga= f.reduce((a,c)=>a+c.descarga,0);
   const totMerma   = f.reduce((a,c)=>a+c.merma_tot,0);
@@ -2706,8 +2740,15 @@ async function loadFromSheets() {
       const campo_raw = String(r[2]||"").trim();
       const grano = String(r[4]||"").trim();
       if(!campo_raw||!grano||!GRANOS_OK.has(grano)) return;
-      const campo = (CAMPO_NORM_MAP[campo_raw]||campo_raw.toUpperCase().trim());
-      if(!LOTES_HA_MAP.hasOwnProperty(campo)) return;
+      // Si el nombre exacto no está en el mapa, se prueba sacándole un número final
+      // (ej: "Picapietra 1" -> "Picapietra") antes de rendirse, por si en la hoja
+      // se cargó el campo con un sufijo de sub-lote/silobolsa.
+      const campo_sin_num = campo_raw.replace(/\s+\d+\s*$/,"").trim();
+      const campo = (CAMPO_NORM_MAP[campo_raw] || CAMPO_NORM_MAP[campo_sin_num] || campo_sin_num.toUpperCase().trim());
+      if(!LOTES_HA_MAP.hasOwnProperty(campo)){
+        console.log("Cosecha: campo no reconocido, se descartó esta fila ->", JSON.stringify(campo_raw), "(normalizado a", JSON.stringify(campo)+")");
+        return;
+      }
       const ha = LOTES_HA_MAP[campo]||0;
       const kg_netos = parseNum(r[25]);
       const prods_def = LOTES_PROD_MAP[campo]||[];
@@ -3098,6 +3139,11 @@ loadFromSheets();
       <p style="font-size:11px;color:#6b7280;margin:-4px 0 12px">La rayita negra marca el % pactado; el color muestra el % real retirado por cada uno.</p>
       <div id="comp-cultivo-bars"></div>
     </div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <h3>⚖️ Kg Netos Teórico vs Retirado — Total por Productor (todos los convenios)</h3>
+    <p style="font-size:11px;color:#6b7280;margin:-4px 0 12px">Suma de todos los lotes y convenios juntos, respetando los filtros de arriba.</p>
+    <div class="chart-wrap" style="height:280px"><canvas id="ch-cos-teoreal-global"></canvas></div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px">
     <div class="card"><h3>Kg Netos por campo</h3><div class="chart-wrap"><canvas id="ch-cos-campo"></canvas></div></div>
