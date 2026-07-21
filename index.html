@@ -1965,21 +1965,90 @@ function renderMargenBruto(){
     <div class="kpi" style="border-color:${rentProm>=0?"#059669":"#DC2626"}"><div class="val" style="color:${rentProm>=0?"#059669":"#DC2626"}">${fmt(rentProm,0)}%</div><div class="lbl">Rentabilidad promedio</div></div>`;
 
   const granoColMap = {"SOJA 1°":"#2D6A4F","MAIZ":"#E8A838","TRIGO":"#C9A84C","SOJA 2°":"#1A4D7C"};
+
+  // ── Chart 1: MB U$D/Ha por lote, apilando los cultivos de un mismo lote ──────
+  // (así Trigo + Soja 2° en el mismo lote se ven como una sola barra combinada)
+  const lotesOrden = [...new Set(f.map(r=>r.lote))].sort();
+  const cultivosPresentes = [...new Set(f.map(r=>r.cultivo))];
+  const ordenCultivos = ["SOJA 1°","MAIZ","TRIGO","SOJA 2°"].filter(c=>cultivosPresentes.includes(c));
   dC("ch-margen");
   charts["ch-margen"] = new Chart(ge("ch-margen"),{
     type:"bar",
     data:{
-      labels: f.map(r=>r.lote+" · "+r.cultivo),
-      datasets:[{
-        label:"MB U$D/Ha", data:f.map(r=>r.mb_ha),
-        backgroundColor:f.map(r=>granoColMap[r.cultivo]||"#888"), borderRadius:4
-      }]
+      labels: lotesOrden,
+      datasets: ordenCultivos.map(cv=>({
+        label: cv,
+        data: lotesOrden.map(lt=>{
+          const r = f.find(x=>x.lote===lt && x.cultivo===cv);
+          return r ? r.mb_ha : 0;
+        }),
+        backgroundColor: granoColMap[cv]||"#888",
+        borderRadius: 3, stack: "mb"
+      }))
     },
     options:{
       responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{display:false},
-        tooltip:{callbacks:{label:ctx=>"U$D "+fmt(ctx.raw,2)+"/ha"}}},
-      scales:{y:{grid:{color:"#eee"},ticks:{callback:v=>"U$D "+fmt(v,0)}},x:{ticks:{font:{size:9}}}}
+      plugins:{legend:{position:"bottom",labels:{font:{size:10}}},
+        tooltip:{callbacks:{label:ctx=>ctx.dataset.label+": U$D "+fmt(ctx.raw,2)+"/ha"}}},
+      scales:{
+        y:{stacked:true,grid:{color:"#eee"},ticks:{callback:v=>"U$D "+fmt(v,0)}},
+        x:{stacked:true,ticks:{font:{size:9}}}
+      }
+    }
+  });
+
+  // ── Chart 2: Composición del Margen Bruto por lote (barra apilada horizontal) ─
+  // Suma los rubros de costo + MB de todos los cultivos de cada lote (si tuvo 2,
+  // como Trigo+Soja2°, se suman), para que el total de la barra sea el Ingreso Neto.
+  const porLoteComp = {};
+  f.forEach(r=>{
+    if(!porLoteComp[r.lote]) porLoteComp[r.lote] = {lote:r.lote,
+      arrendamiento:0,labores:0,semilla:0,fertilizante:0,agroquimicos:0,seguro:0,administracion:0,cosecha:0,mb:0,ingreso_neto:0};
+    const p = porLoteComp[r.lote];
+    p.arrendamiento += r.arrendamiento||0;
+    p.labores       += r.labores||0;
+    p.semilla       += r.semilla||0;
+    p.fertilizante  += r.fertilizante||0;
+    p.agroquimicos  += r.agroquimicos||0;
+    p.seguro        += r.seguro||0;
+    p.administracion+= r.administracion||0;
+    p.cosecha       += r.cosecha||0;
+    p.mb            += r.mb_ha||0;
+    p.ingreso_neto  += r.ingreso_neto||0;
+  });
+  const compRows = Object.values(porLoteComp).sort((a,b)=>a.lote.localeCompare(b.lote));
+  const RUBROS = [
+    {key:"arrendamiento", label:"Arrendamiento", color:"#8B5E3C"},
+    {key:"labores",       label:"Labores",        color:"#C9A84C"},
+    {key:"semilla",       label:"Semilla",        color:"#6B21A8"},
+    {key:"fertilizante",  label:"Fertilizante",   color:"#1A4D7C"},
+    {key:"agroquimicos",  label:"Agroquímicos",   color:"#DC2626"},
+    {key:"seguro",        label:"Seguro",         color:"#9CA3AF"},
+    {key:"administracion",label:"Administración", color:"#64748B"},
+    {key:"cosecha",       label:"Cosecha",        color:"#E8A838"},
+    {key:"mb",            label:"Margen Bruto",   color:"#2D6A4F"},
+  ];
+  const compWrap = ge("ch-margen-comp");
+  if(compWrap) compWrap.parentElement.style.height = Math.max(320, 60+compRows.length*38)+"px";
+  dC("ch-margen-comp");
+  charts["ch-margen-comp"] = new Chart(ge("ch-margen-comp"),{
+    type:"bar",
+    data:{
+      labels: compRows.map(r=>r.lote),
+      datasets: RUBROS.map(rb=>({
+        label: rb.label,
+        data: compRows.map(r=>r[rb.key]),
+        backgroundColor: rb.color, stack:"comp"
+      }))
+    },
+    options:{
+      indexAxis:"y", responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:"bottom",labels:{font:{size:9},boxWidth:12}},
+        tooltip:{callbacks:{label:ctx=>ctx.dataset.label+": U$D "+fmt(ctx.raw,2)+"/ha"}}},
+      scales:{
+        x:{stacked:true,grid:{color:"#eee"},ticks:{callback:v=>"U$D "+fmt(v,0)}},
+        y:{stacked:true,ticks:{font:{size:10}}}
+      }
     }
   });
 
@@ -2382,15 +2451,35 @@ function parseMargenSheet(rawRows, cultivoLabel){
     }
     return null;
   }
-  const haRow   = findRow("HAS:");
-  const mbRow   = findRow("MB");
-  const rentRow = findRow("RENTABILIDAD (%)");
+  const haRow    = findRow("HAS:");
+  const arrRow   = findRow("ARRENDAMIENTO");
+  const labRow   = findRow("LABORES");
+  const semRow   = findRow("SEMILLA");
+  const fertRow  = findRow("FERTILIZANTE");
+  const agroRow  = findRow("AGROQUIMICOS");
+  const segRow   = findRow("SEGURO (TN/HA)") || findRow("SEGURO");
+  const admRow   = findRow("ADMINISTRACION");
+  const cosRow   = findRow("COSECHA");
+  const egrRow   = findRow("EGRESOS");
+  const ingRow   = findRow("INGRESO NETO");
+  const mbRow    = findRow("MB");
+  const rentRow  = findRow("RENTABILIDAD (%)");
+  // Los rubros de costo tienen su valor U$D/ha en la columna +2 respecto al inicio
+  // del bloque del campo (mismo desplazamiento que HAS/MB/RENTABILIDAD).
+  const val = (row,g) => row ? parsePrecioARS(row[g.colIdx+2]) : 0;
   grupos.forEach(g=>{
-    const ha   = haRow   ? parsePrecioARS(haRow[g.colIdx+2])   : 0;
-    const mbHa = mbRow   ? parsePrecioARS(mbRow[g.colIdx+2])   : 0;
-    const mbTot= mbRow   ? parsePrecioARS(mbRow[g.colIdx+3])   : 0;
+    const ha   = val(haRow,g);
+    const mbHa = val(mbRow,g);
+    const mbTot= mbRow ? parsePrecioARS(mbRow[g.colIdx+3]) : 0;
     const rent = rentRow ? parsePrecioARS(String(rentRow[g.colIdx+2]||"").replace("%","")) : 0;
-    if(g.lote) out.push({ lote:g.lote, cultivo:cultivoLabel, ha, mb_ha:mbHa, mb_total:mbTot, rentabilidad:rent });
+    if(!g.lote) return;
+    out.push({
+      lote:g.lote, cultivo:cultivoLabel, ha, mb_ha:mbHa, mb_total:mbTot, rentabilidad:rent,
+      arrendamiento: val(arrRow,g), labores: val(labRow,g), semilla: val(semRow,g),
+      fertilizante: val(fertRow,g), agroquimicos: val(agroRow,g), seguro: val(segRow,g),
+      administracion: val(admRow,g), cosecha: val(cosRow,g), egresos: val(egrRow,g),
+      ingreso_neto: val(ingRow,g),
+    });
   });
   return out;
 }
@@ -2754,7 +2843,7 @@ async function loadFromSheets() {
       if(r.lote==="CHACRA"){
         ["CHACRA IZQUIERDA","CHACRA DERECHA"].forEach(loteReal=>{
           const haReal = LOTES_HA_MAP[loteReal]||(r.ha/2);
-          margenFinal.push({ lote:loteReal, cultivo:r.cultivo, ha:haReal, mb_ha:r.mb_ha, mb_total:r.mb_ha*haReal, rentabilidad:r.rentabilidad });
+          margenFinal.push({ ...r, lote:loteReal, ha:haReal, mb_total:r.mb_ha*haReal });
         });
       } else {
         margenFinal.push(r);
@@ -3252,7 +3341,13 @@ loadFromSheets();
   </div>
   <div class="card" style="margin-bottom:14px">
     <h3>Margen Bruto (U$D/Ha) por Lote</h3>
+    <p style="font-size:11px;color:#6b7280;margin:-4px 0 12px">Los lotes con doble cultivo (Trigo + Soja 2°) se apilan en una sola barra, mostrando el margen combinado del año.</p>
     <div class="chart-wrap" style="height:320px"><canvas id="ch-margen"></canvas></div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <h3>🧩 Composición del Margen Bruto por Lote</h3>
+    <p style="font-size:11px;color:#6b7280;margin:-4px 0 12px">De cada U$D de Ingreso Neto, así se reparte entre los costos y lo que queda de margen (si un lote tuvo 2 cultivos, se suman ambos).</p>
+    <div class="chart-wrap" style="height:380px"><canvas id="ch-margen-comp"></canvas></div>
   </div>
   <div class="card">
     <h3>📈 Detalle de Margen Bruto por Lote</h3>
