@@ -144,6 +144,7 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
       <button class="tab" onclick="showPage('cosecha',this)">🌾 Movimiento de cosecha</button>
       <button class="tab" onclick="showPage('stockgrano',this)">🏭 Stock Grano</button>
       <button class="tab" onclick="showPage('ventas',this)">💰 Ventas</button>
+      <button class="tab" onclick="showPage('margen',this)">📈 Margen Bruto</button>
     </div>
   </div>
 
@@ -459,7 +460,7 @@ function showPage(id,btn){
     ge("sidebar").classList.remove("open");
     ge("sidebar-overlay").classList.remove("open");
   }
-  const fns={stock:renderStock,compras:renderCompras,retiros:renderRetiros,labores:renderLabores,lotes:renderLotes,aportes:renderAportes,retiros_vs:renderRetirosVsAportes,cosecha:renderCosecha,stockgrano:renderStockGrano,ventas:renderVentas,facturacion:renderFacturacion};
+  const fns={stock:renderStock,compras:renderCompras,retiros:renderRetiros,labores:renderLabores,lotes:renderLotes,aportes:renderAportes,retiros_vs:renderRetirosVsAportes,cosecha:renderCosecha,stockgrano:renderStockGrano,ventas:renderVentas,facturacion:renderFacturacion,margen:renderMargenBruto};
   if(fns[id]) try{ fns[id](); } catch(e){ console.error("Error en "+id+":", e); }
 }
 
@@ -1111,6 +1112,7 @@ let VENTAS_DATA = [];
 let CONDICIONES_GENERAL = [];
 let CONDICIONES_GEA_DETALLE = [];
 let FACTURACION_DATA = [];
+let MARGEN_DATA = [];
 
 let cosechaLotesSel = new Set();
 let cosConvSel = new Set();
@@ -1938,6 +1940,69 @@ function showExtracDetalle(silobolsa, grano){
 }
 
 // ── FACTURACIÓN ────────────────────────────────────────────────────────────────
+// ── MARGEN BRUTO ──────────────────────────────────────────────────────────────
+function renderMargenBruto(){
+  const cult = ge("fmg-cult")?.value||"";
+  const lote = ge("fmg-lote")?.value||"";
+
+  popSel("fmg-cult", MARGEN_DATA.map(r=>r.cultivo));
+  popSel("fmg-lote", MARGEN_DATA.map(r=>r.lote));
+
+  const f = MARGEN_DATA.filter(r=>
+    (!cult||r.cultivo===cult) &&
+    (!lote||r.lote===lote)
+  ).sort((a,b)=>a.lote.localeCompare(b.lote)||a.cultivo.localeCompare(b.cultivo));
+
+  const totHa = f.reduce((a,r)=>a+r.ha,0);
+  const totMB = f.reduce((a,r)=>a+r.mb_total,0);
+  const mbHaProm = totHa>0 ? totMB/totHa : 0;
+  const rentProm = f.length ? f.reduce((a,r)=>a+r.rentabilidad,0)/f.length : 0;
+
+  ge("kpi-margen").innerHTML = `
+    <div class="kpi" style="border-color:#C9A84C"><div class="val">${fmt(totHa,1)}</div><div class="lbl">Ha</div></div>
+    <div class="kpi" style="border-color:#2D6A4F"><div class="val">${fmtU(mbHaProm)}</div><div class="lbl">MB promedio U$D/Ha</div></div>
+    <div class="kpi" style="border-color:#1A3C2E"><div class="val">${fmtU(totMB)}</div><div class="lbl">MB Total U$D</div></div>
+    <div class="kpi" style="border-color:${rentProm>=0?"#059669":"#DC2626"}"><div class="val" style="color:${rentProm>=0?"#059669":"#DC2626"}">${fmt(rentProm,0)}%</div><div class="lbl">Rentabilidad promedio</div></div>`;
+
+  const granoColMap = {"SOJA 1°":"#2D6A4F","MAIZ":"#E8A838","TRIGO":"#C9A84C","SOJA 2°":"#1A4D7C"};
+  dC("ch-margen");
+  charts["ch-margen"] = new Chart(ge("ch-margen"),{
+    type:"bar",
+    data:{
+      labels: f.map(r=>r.lote+" · "+r.cultivo),
+      datasets:[{
+        label:"MB U$D/Ha", data:f.map(r=>r.mb_ha),
+        backgroundColor:f.map(r=>granoColMap[r.cultivo]||"#888"), borderRadius:4
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>"U$D "+fmt(ctx.raw,2)+"/ha"}}},
+      scales:{y:{grid:{color:"#eee"},ticks:{callback:v=>"U$D "+fmt(v,0)}},x:{ticks:{font:{size:9}}}}
+    }
+  });
+
+  ge("tb-margen").innerHTML = f.length ? f.map(r=>`<tr>
+      <td><strong>${r.lote}</strong></td>
+      <td><span class="badge" style="background:${(granoColMap[r.cultivo]||"#888")}20;color:${granoColMap[r.cultivo]||"#888"};font-weight:800">${r.cultivo}</span></td>
+      <td style="text-align:right">${fmt(r.ha,1)}</td>
+      <td style="text-align:right;font-weight:700;color:${r.mb_ha>=0?"#059669":"#DC2626"}">${fmtU(r.mb_ha)}</td>
+      <td style="text-align:right;font-weight:800;color:#1A3C2E">${fmtU(r.mb_total)}</td>
+      <td style="text-align:right;color:${r.rentabilidad>=0?"#059669":"#DC2626"}">${fmt(r.rentabilidad,0)}%</td>
+    </tr>`).join("") : `<tr><td colspan="6" style="text-align:center;color:#6b7280;padding:16px">Sin datos — actualizá desde Google Sheets</td></tr>`;
+
+  if(f.length){
+    ge("tb-margen").innerHTML += `<tr style="background:#F0DFA0;font-weight:800">
+      <td colspan="2">TOTAL</td>
+      <td style="text-align:right">${fmt(totHa,1)}</td>
+      <td style="text-align:right">${fmtU(mbHaProm)}</td>
+      <td style="text-align:right">${fmtU(totMB)}</td>
+      <td style="text-align:right">${fmt(rentProm,0)}%</td>
+    </tr>`;
+  }
+}
+
 function renderFacturacion(){
   const cont   = ge("ff-cont")?.value||"";
   const prod   = ge("ff-prod")?.value||"";
@@ -2202,6 +2267,10 @@ const SHEET_URLS = {
   Ventas: "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=240216627",
   Condiciones: "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=481880400",
   Facturacion: "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=844961174",
+  MargenSoja1: "https://docs.google.com/spreadsheets/d/1nQnFzF9Y5LOC0Of-BtXYbR-KyiA5vLyngdW_WJdJjMc/export?format=csv&gid=1441102122",
+  MargenMaiz:  "https://docs.google.com/spreadsheets/d/1nQnFzF9Y5LOC0Of-BtXYbR-KyiA5vLyngdW_WJdJjMc/export?format=csv&gid=284970019",
+  MargenTrigo: "https://docs.google.com/spreadsheets/d/1nQnFzF9Y5LOC0Of-BtXYbR-KyiA5vLyngdW_WJdJjMc/export?format=csv&gid=1474102600",
+  MargenSoja2: "https://docs.google.com/spreadsheets/d/1nQnFzF9Y5LOC0Of-BtXYbR-KyiA5vLyngdW_WJdJjMc/export?format=csv&gid=2140595445",
 };
 
 function parseCSV(text) {
@@ -2283,6 +2352,47 @@ function parsePrecioARS(val){
   if(!s) return 0;
   s = s.replace(/[$\s]/g,"").replace(/\./g,"").replace(",",".");
   return parseFloat(s) || 0;
+}
+
+// ── Margen Bruto: parser genérico para las hojas "MARGEN BRUTO <CULTIVO>" ──────
+// Estas hojas tienen un bloque de columnas por cada campo (ej: "CAMPO: CHACRA" en
+// una celda, y 4 columnas debajo: label/%, label/valor, U$S/HA, U$S TOTAL). Se
+// detecta dinámicamente en qué columna arranca cada campo, y se leen las filas
+// "HAS:", "MB" y "RENTABILIDAD (%)" usando ese mismo desplazamiento (+2 = U$S/HA,
+// +3 = U$S TOTAL), sin asumir una hoja fija — así sirve para las 4 hojas iguales.
+function parseMargenSheet(rawRows, cultivoLabel){
+  const out = [];
+  let campoRowIdx = -1;
+  for(let i=0;i<Math.min(rawRows.length,6);i++){
+    if(rawRows[i].some(c=>String(c||"").trim().toUpperCase().startsWith("CAMPO:"))){ campoRowIdx=i; break; }
+  }
+  if(campoRowIdx<0) return out;
+  const grupos = [];
+  rawRows[campoRowIdx].forEach((c,idx)=>{
+    const txt = String(c||"").trim();
+    if(txt.toUpperCase().startsWith("CAMPO:")){
+      grupos.push({ lote: txt.replace(/campo:/i,"").trim().toUpperCase(), colIdx: idx });
+    }
+  });
+  if(grupos.length===0) return out;
+  function findRow(labelExacto){
+    for(let i=campoRowIdx;i<rawRows.length;i++){
+      const c1 = String(rawRows[i][1]||"").trim().toUpperCase();
+      if(c1===labelExacto) return rawRows[i];
+    }
+    return null;
+  }
+  const haRow   = findRow("HAS:");
+  const mbRow   = findRow("MB");
+  const rentRow = findRow("RENTABILIDAD (%)");
+  grupos.forEach(g=>{
+    const ha   = haRow   ? parsePrecioARS(haRow[g.colIdx+2])   : 0;
+    const mbHa = mbRow   ? parsePrecioARS(mbRow[g.colIdx+2])   : 0;
+    const mbTot= mbRow   ? parsePrecioARS(mbRow[g.colIdx+3])   : 0;
+    const rent = rentRow ? parsePrecioARS(String(rentRow[g.colIdx+2]||"").replace("%","")) : 0;
+    if(g.lote) out.push({ lote:g.lote, cultivo:cultivoLabel, ha, mb_ha:mbHa, mb_total:mbTot, rentabilidad:rent });
+  });
+  return out;
 }
 
 // ── Precios de Pizarra (BCR - Cámara Arbitral de Cereales) ─────────────────────
@@ -2437,7 +2547,7 @@ async function loadFromSheets() {
   showToast("⟳ Cargando datos de Google Sheets...");
   try {
     // Fetch all sheets in parallel
-    const [rawCompras, rawRetiros, rawLotes, rawLabores, rawCosecha, rawStockGrano, rawVentas, rawCondiciones, rawFacturacion] = await Promise.all([
+    const [rawCompras, rawRetiros, rawLotes, rawLabores, rawCosecha, rawStockGrano, rawVentas, rawCondiciones, rawFacturacion, rawMargenSoja1, rawMargenMaiz, rawMargenTrigo, rawMargenSoja2] = await Promise.all([
       fetch(SHEET_URLS.Compras).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Retiros).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Lotes).then(r=>r.text()).then(parseCSV),
@@ -2447,6 +2557,10 @@ async function loadFromSheets() {
       fetch(SHEET_URLS.Ventas).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Condiciones).then(r=>r.text()).then(parseCSV),
       fetch(SHEET_URLS.Facturacion).then(r=>r.text()).then(parseCSV),
+      fetch(SHEET_URLS.MargenSoja1).then(r=>r.text()).then(parseCSV),
+      fetch(SHEET_URLS.MargenMaiz).then(r=>r.text()).then(parseCSV),
+      fetch(SHEET_URLS.MargenTrigo).then(r=>r.text()).then(parseCSV),
+      fetch(SHEET_URLS.MargenSoja2).then(r=>r.text()).then(parseCSV),
     ]);
 
     // Parse Compras - find header row dynamically
@@ -2624,6 +2738,30 @@ async function loadFromSheets() {
       "FICARDI BAJO":40,BALIEN:12,"FICARDI LOMA":40,OMBU:4,"CHACRA DERECHA":30,
       PRIANO:20,"CHACRA IZQUIERDA":30,MANGRULLO:14,PATRICIA:33,REBISSO:30,
       NELIDA:28,PARRA:27,MAROTTA:10,SIGNIFREDI:36,"SIGNIFREDI 15":19};
+
+    // Parse Margen Bruto (4 hojas: Soja 1°, Maíz, Trigo, Soja 2°) y unificarlas.
+    // El campo "CHACRA" en esas hojas representa Chacra Izquierda + Chacra Derecha
+    // juntas (60 ha = 30+30), así que se aplica el mismo U$D/ha a ambos lotes reales,
+    // con el total recalculado según las ha propias de cada uno.
+    const margenCruda = [
+      ...parseMargenSheet(rawMargenSoja1, "SOJA 1°"),
+      ...parseMargenSheet(rawMargenMaiz,  "MAIZ"),
+      ...parseMargenSheet(rawMargenTrigo, "TRIGO"),
+      ...parseMargenSheet(rawMargenSoja2, "SOJA 2°"),
+    ];
+    const margenFinal = [];
+    margenCruda.forEach(r=>{
+      if(r.lote==="CHACRA"){
+        ["CHACRA IZQUIERDA","CHACRA DERECHA"].forEach(loteReal=>{
+          const haReal = LOTES_HA_MAP[loteReal]||(r.ha/2);
+          margenFinal.push({ lote:loteReal, cultivo:r.cultivo, ha:haReal, mb_ha:r.mb_ha, mb_total:r.mb_ha*haReal, rentabilidad:r.rentabilidad });
+        });
+      } else {
+        margenFinal.push(r);
+      }
+    });
+    MARGEN_DATA.length = 0;
+    margenFinal.forEach(r=>MARGEN_DATA.push(r));
     const LOTES_CONV_MAP = {
       PICAPIEDRA:"Caciorgna Hector y Pelizza Javier",ARBOLITO:"Caciorgna Hector y Pelizza Javier",
       "RAFAEL OBLIGADO":"Caciorgna Hector y Pelizza Javier",
@@ -3101,6 +3239,31 @@ loadFromSheets();
       <th onclick="sortTable('tb-fact-det',12)" style="cursor:pointer">Estado</th>
       <th onclick="sortTable('tb-fact-det',13)" style="cursor:pointer">N° Factura</th>
     </tr></thead><tbody id="tb-fact-det"></tbody></table></div>
+  </div>
+</div>
+
+<!-- MARGEN BRUTO -->
+<div id="page-margen" class="page">
+  <div class="kpi-row" id="kpi-margen"></div>
+  <div class="filters">
+    <div><label>Cultivo</label><select id="fmg-cult" onchange="renderMargenBruto()"><option value="">Todos</option></select></div>
+    <div><label>Lote</label><select id="fmg-lote" onchange="renderMargenBruto()"><option value="">Todos</option></select></div>
+    <button class="btn-cl" onclick="clrF(['fmg-cult','fmg-lote'],renderMargenBruto)">✕ Limpiar</button>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <h3>Margen Bruto (U$D/Ha) por Lote</h3>
+    <div class="chart-wrap" style="height:320px"><canvas id="ch-margen"></canvas></div>
+  </div>
+  <div class="card">
+    <h3>📈 Detalle de Margen Bruto por Lote</h3>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th onclick="sortTable('tb-margen',0)" style="cursor:pointer">Lote</th>
+      <th onclick="sortTable('tb-margen',1)" style="cursor:pointer">Cultivo</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-margen',2,true)">Ha</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-margen',3,true)">MB U$D/Ha</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-margen',4,true)">MB Total U$D</th>
+      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-margen',5,true)">Rentabilidad %</th>
+    </tr></thead><tbody id="tb-margen"></tbody></table></div>
   </div>
 </div>
 
