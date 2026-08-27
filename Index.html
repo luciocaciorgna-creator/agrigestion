@@ -2717,7 +2717,7 @@ async function loadFromSheets() {
           const c = String(h||"").replace(/\n/g," ").trim().toLowerCase();
           if(c==="fecha") lC.fecha=idx;
           else if(c==="lote") lC.lote=idx;
-          else if(c==="ha") lC.ha=idx;
+          else if(c.split(" ")[0]==="ha") lC.ha=idx;
           else if(c.includes("tipo labor")) lC.tipo=idx;
           else if(c==="cultivo") lC.cultivo=idx;
           else if(c==="contratista") lC.contratista=idx;
