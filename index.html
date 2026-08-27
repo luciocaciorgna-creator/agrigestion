@@ -744,7 +744,7 @@ function renderLabores(){
   // Cards de labores — si no hay un lote específico elegido, se agrupan visualmente
   // por lote (con su propio encabezado) para no mezclar todo en una sola lista.
   const buildLaborCard = (l, autoOpen)=>{
-    const ha = getLoteHa(l.lote) || 1;
+    const ha = (l.ha_aplicadas>0 ? l.ha_aplicadas : getLoteHa(l.lote)) || 1;
     const tc = l.tc || TC;
     const moUSD = l.precio_mo_ha ? l.precio_mo_ha/tc : 0;
     const insUSD = (Array.isArray(l.insumos)?l.insumos:[]).reduce((a,i)=>a+(i.cantidad||0)*(i.precio_usd_u||precioIns[i.nombre]||0),0);
@@ -787,6 +787,7 @@ function renderLabores(){
           <span style="font-size:11px;color:#6b7280;margin-left:8px">${l.fecha}</span>
           ${l.cultivo?`<span class="badge bg-azul" style="margin-left:4px">${l.cultivo}</span>`:""}
           ${l.actividad?`<span class="badge" style="margin-left:4px;background:#1A3C2E;color:#C9A84C">Act. ${l.actividad}</span>`:""}
+          <span style="font-size:11px;color:#6b7280;margin-left:8px">${l.ha_aplicadas>0?fmt(l.ha_aplicadas,1)+" ha aplicadas":"("+fmt(ha,1)+" ha del lote, sin dato de Ha en la fila)"}</span>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           ${l.contratista?`<span style="font-size:11px;color:#6b7280">🚜 ${l.contratista}</span>`:""}
@@ -2703,7 +2704,7 @@ async function loadFromSheets() {
     // Parse Labores - detect columns by name
     const laborMap = {};
     let labHeaderIdx = 0;
-    let lC = {fecha:0,lote:1,tipo:4,cultivo:5,contratista:6,tc:7,precio_mo_ha:8,insumo:11,cantidad:14,prod_a:16,teo_a:18,real_a:19,prod_b:21,teo_b:23,real_b:24,actividad:-1,precio_usd_u:-1};
+    let lC = {fecha:0,lote:1,tipo:4,cultivo:5,contratista:6,tc:7,precio_mo_ha:8,insumo:11,cantidad:14,prod_a:16,teo_a:18,real_a:19,prod_b:21,teo_b:23,real_b:24,actividad:-1,precio_usd_u:-1,ha:-1};
     for(let i=0;i<Math.min(rawLabores.length,8);i++){
       const row = rawLabores[i];
       // Se busca "Fecha" y "Lote" en CUALQUIER columna de la fila (no en una posición
@@ -2716,6 +2717,7 @@ async function loadFromSheets() {
           const c = String(h||"").replace(/\n/g," ").trim().toLowerCase();
           if(c==="fecha") lC.fecha=idx;
           else if(c==="lote") lC.lote=idx;
+          else if(c==="ha") lC.ha=idx;
           else if(c.includes("tipo labor")) lC.tipo=idx;
           else if(c==="cultivo") lC.cultivo=idx;
           else if(c==="contratista") lC.contratista=idx;
@@ -2752,9 +2754,11 @@ async function loadFromSheets() {
         fecha, lote, actividad, tipos:new Set(),
         cultivo:String(r[lC.cultivo]||""), contratista:String(r[lC.contratista]||""),
         tc:parseNum(r[lC.tc])||0, precio_mo_ha:parseNum(r[lC.precio_mo_ha])||0,
-        prod_a:String(r[lC.prod_a]||""), prod_b:String(r[lC.prod_b]||""), insumos:[]
+        prod_a:String(r[lC.prod_a]||""), prod_b:String(r[lC.prod_b]||""), insumos:[],
+        ha_aplicadas: lC.ha>=0 ? (parseNum(r[lC.ha])||0) : 0
       };
       const lab=laborMap[key];
+      if(!lab.ha_aplicadas && lC.ha>=0 && r[lC.ha]) lab.ha_aplicadas = parseNum(r[lC.ha])||0;
       const tipo=String(r[lC.tipo]||"");
       if(tipo&&tipo!=="Tipo Labor"&&tipo!=="Tipo de Labor"){
         lab.tipos.add(tipo);
