@@ -98,6 +98,30 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
 .toast{position:fixed;bottom:20px;right:20px;background:#1A3C2E;color:#fff;padding:10px 16px;border-radius:8px;font-size:12px;font-weight:700;z-index:999;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.2)}
 @media(max-width:640px){.grid2{grid-template-columns:1fr}.kpi{min-width:130px}.chart-wrap{height:200px}}
+
+/* ── Navegación por módulos ── */
+.gbar{position:sticky;top:0;z-index:50;background:#F4F1EA;border-bottom:1px solid #E3DDCF;padding:8px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.crumb{font-size:13px;font-weight:800;color:#1A3C2E}
+.crumb span{color:#6b7280;font-weight:600}
+.gbar-r{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.gbar-r label{font-size:11px;font-weight:700;color:#6b7280}
+.gbar-r select{border:1.5px solid #D1C9BB;border-radius:8px;padding:6px 10px;font-size:12px;background:#fff}
+.modbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.modbar button{background:#EDE9E1;border:none;border-radius:20px;padding:7px 16px;cursor:pointer;font-size:12px;font-weight:700;color:#1A3C2E}
+.modbar button.active{background:#1A3C2E;color:#C9A84C}
+.card h3{cursor:pointer;user-select:none;position:relative;padding-right:22px}
+.card h3::after{content:"▾";position:absolute;right:2px;top:0;color:#9ca3af;font-size:12px}
+.card.collapsed h3::after{content:"▸"}
+.card.collapsed > :not(h3){display:none!important}
+.card.collapsed h3{margin-bottom:0;border-bottom:none;padding-bottom:0}
+.home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:14px}
+.home-card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,0.07);cursor:pointer;border-top:4px solid #2D6A4F;transition:transform .12s}
+.home-card:hover{transform:translateY(-2px)}
+.home-card h4{font-size:13px;font-weight:800;color:#1A3C2E;margin-bottom:10px;display:flex;justify-content:space-between}
+.home-card h4 span{font-size:11px;color:#2D6A4F;font-weight:700}
+.hc-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed #EDE9E1;font-size:12px}
+.hc-row:last-child{border-bottom:none}
+.hc-row b{font-weight:800;color:#1A3C2E}
 </style>
 </head>
 <body>
@@ -119,41 +143,66 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
     <h1>🌾 Menú</h1>
     <button class="sidebar-close" onclick="toggleSidebar()" aria-label="Cerrar menú">✕</button>
   </div>
+  <button class="tab active" data-page="home" onclick="showPage('home',this)">🏠 Inicio</button>
+  <button class="tab" data-page="lotes" onclick="showPage('lotes',this)">🗺️ Campaña y lotes</button>
+
   <div class="menu-group">
     <button class="menu-group-head" onclick="toggleGroup(this)">📦 Insumos <span class="chev">▾</span></button>
     <div class="menu-group-body">
-      <button class="tab active" onclick="showPage('stock',this)">📦 Stock</button>
-      <button class="tab" onclick="showPage('compras',this)">🛒 Compras</button>
-      <button class="tab" onclick="showPage('retiros',this)">↔ Retiros</button>
+      <button class="tab" data-page="stock" onclick="showPage('stock',this)">Stock</button>
+      <button class="tab" data-page="compras" onclick="showPage('compras',this)">Compras</button>
+      <button class="tab" data-page="retiros" onclick="showPage('retiros',this)">Retiros y retiro vs aporte</button>
     </div>
   </div>
 
   <div class="menu-group">
     <button class="menu-group-head" onclick="toggleGroup(this)">🚜 Labores <span class="chev">▾</span></button>
     <div class="menu-group-body">
-      <button class="tab" onclick="showPage('labores',this)">🚜 Registro de labores</button>
-      <button class="tab" onclick="showPage('aportes',this)">👥 Aportes</button>
-      <button class="tab" onclick="showPage('retiros_vs',this)">📊 Aportes Insumos</button>
-      <button class="tab" onclick="showPage('facturacion',this)">🧾 Facturación</button>
+      <button class="tab" data-page="labores" onclick="showPage('labores',this)">Registro de labores</button>
+      <button class="tab" data-page="aportes" onclick="showPage('aportes',this)">Aportes por productor</button>
+      <button class="tab" data-page="retiros_vs" onclick="showPage('retiros_vs',this)">Aportes de insumos</button>
+      <button class="tab" data-page="facturacion" onclick="showPage('facturacion',this)">Facturación contratistas</button>
     </div>
   </div>
 
   <div class="menu-group">
     <button class="menu-group-head" onclick="toggleGroup(this)">🌾 Cosecha <span class="chev">▾</span></button>
     <div class="menu-group-body">
-      <button class="tab" onclick="showPage('cosecha',this)">🌾 Movimiento de cosecha</button>
-      <button class="tab" onclick="showPage('stockgrano',this)">🏭 Stock Grano</button>
-      <button class="tab" onclick="showPage('ventas',this)">💰 Ventas</button>
-      <button class="tab" onclick="showPage('margen',this)">📈 Margen Bruto</button>
+      <button class="tab" data-page="cosecha" onclick="showPage('cosecha',this)">Movimiento de cosecha</button>
+      <button class="tab" data-page="stockgrano" onclick="showPage('stockgrano',this)">Stock de grano</button>
     </div>
   </div>
 
-  <button class="tab" onclick="showPage('lotes',this)" style="border-top:1px solid rgba(255,255,255,0.08)">🗺️ Lotes</button>
+  <div class="menu-group">
+    <button class="menu-group-head" onclick="toggleGroup(this)">💰 Comercial <span class="chev">▾</span></button>
+    <div class="menu-group-body">
+      <button class="tab" data-page="ventas" onclick="showPage('ventas',this)">Ventas</button>
+    </div>
+  </div>
+
+  <div class="menu-group">
+    <button class="menu-group-head" onclick="toggleGroup(this)">📈 Resultados <span class="chev">▾</span></button>
+    <div class="menu-group-body">
+      <button class="tab" data-page="margen" onclick="showPage('margen',this)">Margen bruto</button>
+    </div>
+  </div>
 </nav>
 <div id="toast" class="toast"></div>
 
+<div class="gbar" id="gbar">
+  <div class="crumb" id="crumb">🏠 Inicio</div>
+  <div class="gbar-r">
+    <label>Productor</label>
+    <select id="g-prod" onchange="setGlobalProd(this.value)"><option value="">Todos</option></select>
+    <button class="btn-cl" style="background:#EDE9E1;color:#1A3C2E" onclick="toggleAllCards()" title="Contraer / expandir las tarjetas de la página">⇕ Contraer/expandir</button>
+  </div>
+</div>
+<div id="page-home" class="page active">
+  <div id="home-body"></div>
+</div>
+
 <!-- STOCK -->
-<div id="page-stock" class="page active">
+<div id="page-stock" class="page">
   <div class="kpi-row" id="kpi-stock"></div>
   <div class="filters">
     <div><label>Insumo</label><input type="text" id="f-ins" placeholder="Buscar insumo..." oninput="renderStock()"></div>
@@ -462,10 +511,134 @@ function showPage(id,btn){
     ge("sidebar").classList.remove("open");
     ge("sidebar-overlay").classList.remove("open");
   }
-  const fns={stock:renderStock,compras:renderCompras,retiros:renderRetiros,labores:renderLabores,lotes:renderLotes,aportes:renderAportes,retiros_vs:renderRetirosVsAportes,cosecha:renderCosecha,stockgrano:renderStockGrano,ventas:renderVentas,facturacion:renderFacturacion,margen:renderMargenBruto};
+  const fns=window.PAGE_FNS={home:renderHome,stock:renderStock,compras:renderCompras,retiros:renderRetiros,labores:renderLabores,lotes:renderLotes,aportes:renderAportes,retiros_vs:renderRetirosVsAportes,cosecha:renderCosecha,stockgrano:renderStockGrano,ventas:renderVentas,facturacion:renderFacturacion,margen:renderMargenBruto};
   if(fns[id]) try{ fns[id](); } catch(e){ console.error("Error en "+id+":", e); }
 }
 
+
+
+// ══ NAVEGACIÓN POR MÓDULOS ══════════════════════════════════════════════════
+const MODULES=[
+  {id:"home",  nombre:"Inicio",    icon:"🏠", pages:[["home","Resumen"]]},
+  {id:"camp",  nombre:"Campaña",   icon:"🗺️", pages:[["lotes","Lotes y convenios"]]},
+  {id:"ins",   nombre:"Insumos",   icon:"📦", pages:[["stock","Stock"],["compras","Compras"],["retiros","Retiros y retiro vs aporte"]]},
+  {id:"lab",   nombre:"Labores",   icon:"🚜", pages:[["labores","Registro de labores"],["aportes","Aportes por productor"],["retiros_vs","Aportes de insumos"],["facturacion","Facturación contratistas"]]},
+  {id:"cos",   nombre:"Cosecha",   icon:"🌾", pages:[["cosecha","Movimiento de cosecha"],["stockgrano","Stock de grano"]]},
+  {id:"com",   nombre:"Comercial", icon:"💰", pages:[["ventas","Ventas"]]},
+  {id:"res",   nombre:"Resultados",icon:"📈", pages:[["margen","Margen bruto"]]},
+];
+function moduleOf(pageId){ return MODULES.find(m=>m.pages.some(p=>p[0]===pageId)); }
+
+function buildModuleBars(){
+  MODULES.forEach(m=>{
+    if(m.pages.length<2) return;
+    m.pages.forEach(([pid])=>{
+      const pg=ge("page-"+pid); if(!pg||pg.querySelector(":scope > .modbar")) return;
+      const bar=document.createElement("div"); bar.className="modbar"; bar.dataset.mod=m.id;
+      bar.innerHTML=m.pages.map(([id,n])=>`<button data-p="${id}" onclick="showPage('${id}')">${n}</button>`).join("");
+      pg.insertBefore(bar,pg.firstChild);
+    });
+  });
+}
+
+function setGlobalProd(v){
+  window.GLOBAL_PROD=v;
+  applyGlobalProd(true);
+}
+function applyGlobalProd(rerender){
+  const v=window.GLOBAL_PROD||"";
+  const act=document.querySelector(".page.active"); if(!act) return;
+  let changed=false;
+  act.querySelectorAll("select[id$='-prod'],select[id$='prod']").forEach(sel=>{
+    if(sel.id==="g-prod") return;
+    const has=[...sel.options].some(o=>o.value===v);
+    const nv = v && has ? v : (v ? sel.value : "");
+    if(sel.value!==nv){ sel.value=nv; changed=true; }
+  });
+  if(changed || (rerender && act.id==="page-home")){
+    const id=act.id.replace("page-","");
+    if(PAGE_FNS[id]) try{PAGE_FNS[id]();}catch(e){console.error(e);}
+  }
+}
+
+function toggleAllCards(){
+  const cards=[...document.querySelectorAll(".page.active .card")].filter(c=>c.querySelector(":scope > h3"));
+  const anyOpen=cards.some(c=>!c.classList.contains("collapsed"));
+  cards.forEach(c=>c.classList.toggle("collapsed",anyOpen));
+}
+document.addEventListener("click",e=>{
+  const h=e.target.closest(".card > h3"); if(!h) return;
+  if(e.target.closest("button,input,select,a")) return;
+  h.parentElement.classList.toggle("collapsed");
+  window.dispatchEvent(new Event("resize"));
+});
+
+// envuelve showPage: sincroniza menú, migas de pan, barra de módulo y filtro global
+(function(){
+  const _show=showPage;
+  window.showPage=showPage=function(id,btn){
+    _show(id,btn);
+    document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",t.dataset.page===id));
+    document.querySelectorAll(".modbar button").forEach(b=>b.classList.toggle("active",b.dataset.p===id));
+    const m=moduleOf(id), pg=m&&m.pages.find(p=>p[0]===id);
+    const cr=ge("crumb");
+    if(cr) cr.innerHTML = m ? (m.pages.length>1||id==="home" ? `${m.icon} ${m.nombre}`+(id==="home"?"":` <span>›</span> ${pg[1]}`) : `${m.icon} ${m.nombre} <span>›</span> ${pg[1]}`) : id;
+    // abre el grupo del menú que corresponde
+    const sb=document.querySelector('.sidebar .tab[data-page="'+id+'"]');
+    if(sb){ const g=sb.closest(".menu-group"); if(g) g.classList.remove("collapsed"); }
+    window.scrollTo(0,0);
+    applyGlobalProd(false);
+  };
+})();
+
+function fillGlobalProd(){
+  const sel=ge("g-prod"); if(!sel) return;
+  const names=[...new Set([...Object.keys(PC),...VENTAS_DATA.map(v=>v.productor)].filter(Boolean))].sort();
+  const cur=window.GLOBAL_PROD||"";
+  sel.innerHTML='<option value="">Todos</option>'+names.map(n=>`<option ${n===cur?"selected":""}>${n}</option>`).join("");
+}
+
+// ══ INICIO ══════════════════════════════════════════════════════════════════
+function renderHome(){
+  fillGlobalProd();
+  const gp=window.GLOBAL_PROD||"";
+  const sum=(a,f)=>a.reduce((x,y)=>x+(f(y)||0),0);
+  // Insumos
+  const st=DATA.stock.filter(x=>!gp||x.productor===gp);
+  const stDisp=sum(st,x=>x.comprado-x.retirado);
+  const conStock=new Set(st.filter(x=>x.stock>0).map(x=>x.insumo)).size;
+  // Labores / facturación
+  const fac=FACTURACION_DATA.filter(x=>!gp||(gp.includes("HECTOR")?x.ha_hector>0:gp.includes("SUCESION")?x.ha_sucesion>0:gp.includes("JAVIER")?x.ha_javier>0:true));
+  const pend=fac.filter(x=>!x.facturado);
+  const pendUsd=sum(pend,x=>(x.ha_totales||0)*(x.precio_usd_ha||0));
+  const contr=new Set(pend.map(x=>x.contratista)).size;
+  // Cosecha
+  const cs=COSECHA_DATA.filter(c=>!gp||(c.titular===gp));
+  const netosOf=c=>String(c.destino||"").toUpperCase().startsWith("BOLSON")?0:(c.kg_netos||0);
+  const porGrano={}; cs.forEach(c=>{const g=(c.grano||"").toUpperCase(); porGrano[g]=(porGrano[g]||0)+netosOf(c);});
+  const haTot=sum(DATA.lotes,l=>l.ha);
+  // Ventas
+  const vt=VENTAS_DATA.filter(v=>!gp||v.productor===gp);
+  const kgV=sum(vt,v=>v.cantidad), usdV=sum(vt,v=>v.total_usd);
+  // Margen
+  const mb=MARGEN_DATA, mbTot=sum(mb,r=>r.mb_total), mbHa=sum(mb,r=>r.ha);
+  const row=(l,v)=>`<div class="hc-row"><span>${l}</span><b>${v}</b></div>`;
+  const card=(pg,ico,tit,col,rows)=>`<div class="home-card" style="border-top-color:${col}" onclick="showPage('${pg}')"><h4>${ico} ${tit} <span>Ver →</span></h4>${rows.join("")}</div>`;
+  ge("home-body").innerHTML=`
+    <div class="card" style="background:#1A3C2E;color:#fff"><div style="font-size:16px;font-weight:900">🌾 AgroGestión 26/27</div>
+      <div style="font-size:12px;opacity:.8;margin-top:4px">${gp?("Filtrado por "+gp):"Todos los productores"} · ${DATA.lotes.length} lotes · ${fmt(haTot,0)} ha · TC ${fmt(TC,0)}</div></div>
+    <div class="home-grid">
+      ${card("stock","📦","Insumos","#8B5E3C",[row("Stock disponible",fmt(stDisp,0)),row("Insumos con stock",conStock),row("Retiros registrados",DATA.retiros.filter(r=>!gp||r.productor===gp).length)])}
+      ${card("facturacion","🚜","Labores y facturación","#2D6A4F",[row("Labores registradas",DATA.labores.length),row("Labores pendientes de facturar",pend.length),row("Pendiente (USD)",fmtU(pendUsd)),row("Contratistas con pendiente",contr)])}
+      ${card("cosecha","🌾","Cosecha","#C9A84C",Object.keys(porGrano).sort().map(g=>row("Kg netos "+g,fmt(porGrano[g],0))).concat([row("Total kg netos",fmt(sum(Object.values(porGrano),x=>x),0))]))}
+      ${card("ventas","💰","Ventas","#1A4D7C",[row("Operaciones",vt.length),row("Kg vendidos",fmt(kgV,0)),row("Total (USD)",fmtU(usdV))])}
+      ${card("margen","📈","Margen bruto","#7C3AED",[row("MB total (USD)",fmtU(mbTot)),row("Ha con margen",fmt(mbHa,0)),row("MB promedio USD/ha",mbHa?fmtU(mbTot/mbHa):"—")])}
+      ${card("lotes","🗺️","Campaña","#059669",[row("Lotes",DATA.lotes.length),row("Hectáreas",fmt(haTot,0)),row("Convenios",new Set(DATA.lotes.map(l=>l.convenio)).size)])}
+    </div>
+    <div class="card"><h3>🧭 Cómo está organizado</h3><div style="font-size:12px;color:#4b5563;line-height:1.7">
+      <b>Insumos</b> → qué se compró, qué se retiró y qué falta. <b>Labores</b> → qué se hizo, qué aportó cada productor y qué falta facturar. <b>Cosecha</b> → kg por lote/convenio y stock en acopios. <b>Comercial</b> → ventas y precios. <b>Resultados</b> → margen bruto por lote.<br>
+      Tip: el filtro <b>Productor</b> de arriba se aplica a todas las pestañas, y tocando el título de cualquier tarjeta la contraés o expandís.</div></div>`;
+}
 
 // ── Sortable tables ───────────────────────────────────────────────────────────
 const sortState = {};
@@ -3230,6 +3403,7 @@ async function loadFromSheets() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 try{fetchTC();}catch(e){}
 renderStock();
+try{buildModuleBars();renderHome();}catch(e){console.error(e);}
 loadFromSheets();
 </script>
 
@@ -3438,4 +3612,5 @@ loadFromSheets();
   </div>
 </div>
 
->
+</body>
+</html>
