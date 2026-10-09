@@ -122,6 +122,13 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
 .hc-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed #EDE9E1;font-size:12px}
 .hc-row:last-child{border-bottom:none}
 .hc-row b{font-weight:800;color:#1A3C2E}
+.mp{display:flex;gap:6px;flex-wrap:wrap}
+.mp button{border:1.5px solid #D1C9BB;background:#FAFAF8;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;color:#1A3C2E;cursor:pointer}
+.mp button.on{background:#1A3C2E;color:#C9A84C;border-color:#1A3C2E}
+.al-kpis{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.al-kpi{border-radius:8px;padding:8px 14px;font-size:11px;border-left:4px solid}
+.al-kpi b{font-size:17px;display:block}
+.st-chip{display:inline-block;background:#F0FDF4;border:1px solid #BBE5C8;border-radius:14px;padding:3px 10px;margin:2px;font-size:11px}
 </style>
 </head>
 <body>
@@ -206,9 +213,13 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
   <div class="kpi-row" id="kpi-stock"></div>
   <div class="filters">
     <div><label>Insumo</label><input type="text" id="f-ins" placeholder="Buscar insumo..." oninput="renderStock()"></div>
-    <div><label>Productor</label><select id="f-prod" onchange="renderStock()"><option value="">Todos</option></select></div>
+    <div><label>Productor (uno o varios)</label><div class="mp" id="mp-stock"></div></div>
     <div><label>Proveedor</label><select id="f-prov" onchange="renderStock()"><option value="">Todos</option></select></div>
-    <button class="btn-cl" onclick="clrF(['f-ins','f-prod','f-prov'],renderStock)">✕ Limpiar</button>
+    <button class="btn-cl" onclick="clrF(['f-ins','f-prov'],function(){MP.stock.clear();renderStock();})">✕ Limpiar</button>
+  </div>
+  <div class="card"><h3>📦 Insumos en stock por proveedor / acopio</h3>
+    <div class="chart-wrap" id="ch-stprov-wrap" style="height:320px"><canvas id="ch-stprov"></canvas></div>
+    <div id="stprov-list" style="margin-top:12px"></div>
   </div>
   <div id="stock-charts-global" class="grid2">
     <div class="card"><h3>Stock por Productor</h3><div class="chart-wrap"><canvas id="ch-prod-global"></canvas></div></div>
@@ -324,6 +335,10 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
 
 <!-- STOCK GRANO -->
 <div id="page-stockgrano" class="page">
+  <div class="card" id="sg-alert-card" style="border-top:4px solid #DC2626">
+    <h3>🚨 Almacenaje: granos que pagan y próximos vencimientos</h3>
+    <div id="sg-alertas"></div>
+  </div>
   <div class="kpi-row" id="kpi-sg"></div>
   <div class="card" style="margin-bottom:14px">
     <h3>💵 Precios de Pizarra (BCR Rosario)</h3>
@@ -331,12 +346,12 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
   </div>
   <div class="filters">
     <div><label>Grano</label><select id="fsg-grano" onchange="renderStockGrano()"><option value="">Todos</option></select></div>
-    <div><label>Productor</label><select id="fsg-prod" onchange="renderStockGrano()"><option value="">Todos</option></select></div>
-    <button class="btn-cl" onclick="clrF(['fsg-grano','fsg-prod'],renderStockGrano)">✕</button>
+    <div><label>Productor (uno o varios)</label><div class="mp" id="mp-sg"></div></div>
+    <button class="btn-cl" onclick="clrF(['fsg-grano'],function(){MP.sg.clear();renderStockGrano();})">✕</button>
   </div>
   <div class="grid2" style="margin-bottom:14px">
-    <div class="card"><h3>Kg por acopio y grano</h3><div class="chart-wrap"><canvas id="ch-sg-acopio"></canvas></div></div>
-    <div class="card"><h3>Distribución por grano</h3><div class="chart-wrap"><canvas id="ch-sg-grano"></canvas></div></div>
+    <div class="card"><h3>Stock actual por acopio y grano (tn)</h3><div class="chart-wrap"><canvas id="ch-sg-acopio"></canvas></div></div>
+    <div class="card"><h3>Stock actual por grano (acopios + silobolsas)</h3><div class="chart-wrap"><canvas id="ch-sg-grano"></canvas></div></div>
   </div>
   <div class="card" style="margin-bottom:14px">
     <h3>🏭 Stock en Acopios por Productor</h3>
@@ -543,6 +558,7 @@ function buildModuleBars(){
 
 function setGlobalProd(v){
   window.GLOBAL_PROD=v;
+  Object.keys(MP).forEach(k=>{MP[k].clear(); if(v) MP[k].add(v);});
   applyGlobalProd(true);
 }
 function applyGlobalProd(rerender){
@@ -555,6 +571,7 @@ function applyGlobalProd(rerender){
     const nv = v && has ? v : (v ? sel.value : "");
     if(sel.value!==nv){ sel.value=nv; changed=true; }
   });
+  if(rerender && (act.id==="page-stock"||act.id==="page-stockgrano")) changed=true;
   if(changed || (rerender && act.id==="page-home")){
     const id=act.id.replace("page-","");
     if(PAGE_FNS[id]) try{PAGE_FNS[id]();}catch(e){console.error(e);}
@@ -640,6 +657,88 @@ function renderHome(){
       Tip: el filtro <b>Productor</b> de arriba se aplica a todas las pestañas, y tocando el título de cualquier tarjeta la contraés o expandís.</div></div>`;
 }
 
+
+// ══ Selector de productor (uno o varios) ═══════════════════════════════════
+const MP={stock:new Set(),sg:new Set()};
+const MP_CB={stock:()=>renderStock(),sg:()=>renderStockGrano()};
+function mpRender(key,names){
+  const el=ge("mp-"+key); if(!el) return;
+  const set=MP[key];
+  el.innerHTML='<button class="'+(set.size?"":"on")+'" data-n="">Todos</button>'+
+    [...new Set(names)].filter(Boolean).sort().map(n=>'<button class="'+(set.has(n)?"on":"")+'" data-n="'+n+'">'+n+'</button>').join("");
+  el.querySelectorAll("button").forEach(b=>b.onclick=()=>{
+    const n=b.dataset.n;
+    if(!n) set.clear(); else if(set.has(n)) set.delete(n); else set.add(n);
+    MP_CB[key]();
+  });
+}
+function mpHas(key,prod){ const s=MP[key]; return !s.size||s.has(prod); }
+
+// ══ Almacenaje: kg que pagan y próximos vencimientos ═══════════════════════
+function almacenajeEventos(rows){
+  const hoy=new Date(); hoy.setHours(0,0,0,0); const ev=[];
+  const dd=iso=>Math.round((new Date(iso+"T00:00:00")-hoy)/86400000);
+  rows.forEach(r=>{
+    if(!(r.stock_actual>0)) return;
+    const gen=CONDICIONES_GENERAL.filter(c=>c.acopio===r.acopio&&c.grano===r.grano);
+    const geaDet=r.acopio==="GEA"?CONDICIONES_GEA_DETALLE.filter(c=>c.productor===r.productor&&c.grano===r.grano):[];
+    const base={productor:r.productor,acopio:r.acopio,grano:r.grano};
+    if(geaDet.length){
+      geaDet.forEach(c=>{
+        const p=parseFechaCondicion(c.almacenaje_libre_hasta);
+        if(p.tipo==="fecha" && c.kg>0) ev.push({...base,ubic:"Partida "+(c.campaña||""),kg:c.kg,tipo:"libre",fecha:p.iso,dias:dd(p.iso),costo:""});
+      });
+    }
+    gen.forEach(c=>{
+      const kgU=c.ubicacion==="PLANTA"?r.stock_planta:r.stock_puerto;
+      if(!(kgU>0)) return;
+      const costo=c.costo_almacenaje||"";
+      if(!geaDet.length){
+        const p=parseFechaCondicion(c.almacenaje_libre);
+        if(p.tipo==="fecha") ev.push({...base,ubic:c.ubicacion,kg:kgU,tipo:"libre",fecha:p.iso,dias:dd(p.iso),costo});
+      }
+      const f=parseFechaCondicion(c.fecha_max_fijacion);
+      if(f.tipo==="fecha") ev.push({...base,ubic:c.ubicacion,kg:kgU,tipo:"fijacion",fecha:f.iso,dias:dd(f.iso),costo});
+    });
+  });
+  return ev;
+}
+function fmtFechaIso(i){ return i.substring(8,10)+"/"+i.substring(5,7)+"/"+i.substring(0,4); }
+function renderAlmacenajeResumen(rows){
+  const box=ge("sg-alertas"); if(!box) return;
+  const ev=almacenajeEventos(rows);
+  const paga=ev.filter(e=>e.dias<0 && e.tipo==="libre").sort((a,b)=>a.dias-b.dias);
+  const fijV=ev.filter(e=>e.dias<0 && e.tipo==="fijacion").sort((a,b)=>a.dias-b.dias);
+  const prox=ev.filter(e=>e.dias>=0).sort((a,b)=>a.dias-b.dias);
+  const sum=a=>a.reduce((x,e)=>x+e.kg,0);
+  const kpi=(c,bg,v,l)=>'<div class="al-kpi" style="border-color:'+c+';background:'+bg+'"><b style="color:'+c+'">'+v+'</b>'+l+'</div>';
+  let h='<div class="al-kpis">'
+    +kpi("#DC2626","#FEF2F2",fmt(sum(paga),0)+" kg","pagando almacenaje hoy")
+    +kpi("#DC2626","#FEF2F2",fmt(sum(prox.filter(e=>e.dias<=15)),0)+" kg","vencen en ≤ 15 días")
+    +kpi("#C9A84C","#FFFBEB",fmt(sum(prox.filter(e=>e.dias>15&&e.dias<=30)),0)+" kg","vencen en 16–30 días")
+    +kpi("#2D6A4F","#F0FDF4",fmt(sum(prox.filter(e=>e.dias>30)),0)+" kg","vencen en > 30 días")
+    +'</div>';
+  const tabla=(tit,col,arr,estado)=>{
+    if(!arr.length) return "";
+    return '<div style="font-size:12px;font-weight:800;color:'+col+';margin:10px 0 4px">'+tit+'</div>'
+      +'<div style="overflow-x:auto"><table><thead><tr><th>Acopio</th><th>Grano</th><th>Productor</th><th>Ubicación</th><th style="text-align:right">Kg</th><th>Concepto</th><th>Fecha</th><th style="text-align:center">'+estado+'</th><th>Costo almac.</th></tr></thead><tbody>'
+      +arr.map(e=>{
+        const c=e.dias<0||e.dias<=15?"#DC2626":(e.dias<=30?"#C9A84C":"#2D6A4F");
+        const t=e.dias<0?("hace "+(-e.dias)+" d"):(e.dias===0?"hoy":"en "+e.dias+" d");
+        return '<tr><td><b>'+e.acopio+'</b></td><td>'+e.grano+'</td><td style="font-size:11px">'+e.productor+'</td><td>'+e.ubic+'</td>'
+          +'<td style="text-align:right;font-weight:800">'+fmt(e.kg,0)+'</td>'
+          +'<td>'+(e.tipo==="libre"?"Fin almacenaje libre":"Fecha máx. fijación")+'</td><td>'+fmtFechaIso(e.fecha)+'</td>'
+          +'<td style="text-align:center"><span style="background:'+c+'22;border:1.5px solid '+c+';color:'+c+';border-radius:12px;padding:2px 9px;font-size:10px;font-weight:800">'+t+'</span></td>'
+          +'<td style="font-size:11px">'+(e.costo||"—")+'</td></tr>';
+      }).join("")+'</tbody></table></div>';
+  };
+  h+=tabla("🔴 Pagando almacenaje (venció el almacenaje libre)","#DC2626",paga,"Venció")
+    +tabla("🟠 Fecha máxima de fijación vencida","#B45309",fijV,"Venció")
+    +tabla("⏳ Próximos a vencer (ordenados por urgencia)","#1A3C2E",prox,"Vence");
+  if(!ev.length) h+='<div style="font-size:12px;color:#6b7280">No hay fechas de almacenaje cargadas en "Condiciones" para el stock actual.</div>';
+  box.innerHTML=h;
+}
+
 // ── Sortable tables ───────────────────────────────────────────────────────────
 const sortState = {};
 function sortTable(tableId, colIdx, numeric=false){
@@ -667,22 +766,48 @@ function sortTable(tableId, colIdx, numeric=false){
 }
 // ── STOCK ─────────────────────────────────────────────────────────────────────
 function renderStock(){
-  const ins=gV("f-ins").toLowerCase(), prod=gV("f-prod"), prov=gV("f-prov");
-  popSel("f-prod",DATA.stock.map(s=>s.productor));
+  const ins=gV("f-ins").toLowerCase(), prov=gV("f-prov");
+  mpRender("stock",DATA.stock.map(s=>s.productor));
   popSel("f-prov",DATA.stock.map(s=>s.proveedor));
   const f=DATA.stock.filter(s=>
     (!ins||s.insumo.toLowerCase().includes(ins))&&
-    (!prod||s.productor===prod)&&(!prov||s.proveedor===prov)
+    mpHas("stock",s.productor)&&(!prov||s.proveedor===prov)
   );
-  const tC=DATA.stock.reduce((a,s)=>a+s.comprado,0);
-  const tR=DATA.stock.reduce((a,s)=>a+s.retirado,0);
-  const con=[...new Set(DATA.stock.filter(s=>s.stock>0).map(s=>s.insumo))].length;
+  const tC=f.reduce((a,s)=>a+s.comprado,0);
+  const tR=f.reduce((a,s)=>a+s.retirado,0);
+  const con=[...new Set(f.filter(s=>s.stock>0).map(s=>s.insumo))].length;
 
   ge("kpi-stock").innerHTML=`
     <div class="kpi" style="border-color:#2D6A4F"><div class="val">${con}</div><div class="lbl">Insumos con stock</div></div>
     <div class="kpi" style="border-color:#1A4D7C"><div class="val">${fmt(tC,0)}</div><div class="lbl">Total comprado</div></div>
     <div class="kpi" style="border-color:#8B5E3C"><div class="val">${fmt(tR,0)}</div><div class="lbl">Total retirado</div></div>
     <div class="kpi" style="border-color:#C9A84C"><div class="val" style="color:#059669">${fmt(tC-tR,0)}</div><div class="lbl">Stock disponible</div></div>`;
+
+  // ── Gráfico de barras por proveedor/acopio, apilado por insumo con stock ──
+  const stk=f.filter(s=>s.stock>0);
+  const provs=[...new Set(stk.map(s=>s.proveedor))].sort();
+  const insList=[...new Set(stk.map(s=>s.insumo))].sort();
+  const pal=["#1A3C2E","#2D6A4F","#52B788","#C9A84C","#E8A838","#8B5E3C","#1A4D7C","#6B21A8","#B5342A","#0E7490","#65A30D","#9333EA","#F97316","#64748B"];
+  const unidadOf={}; stk.forEach(s=>{unidadOf[s.insumo]=s.unidad;});
+  dC("ch-stprov");
+  charts["ch-stprov"]=new Chart(ge("ch-stprov"),{
+    type:"bar",
+    data:{labels:provs,datasets:insList.map((n,i)=>({
+      label:n,stack:"s",backgroundColor:pal[i%pal.length],
+      data:provs.map(pv=>stk.filter(s=>s.proveedor===pv&&s.insumo===n).reduce((a,s)=>a+s.stock,0))
+    }))},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{filter:it=>it.raw>0,callbacks:{label:c=>" "+c.dataset.label+": "+fmt(c.raw,1)+" "+(unidadOf[c.dataset.label]||"")}}},
+      scales:{x:{stacked:true,ticks:{font:{size:11,weight:"bold"}}},y:{stacked:true,grid:{color:"#eee"},ticks:{callback:v=>fmt(v,0)}}}
+    }
+  });
+  ge("stprov-list").innerHTML = provs.length ? provs.map(pv=>{
+    const items=stk.filter(s=>s.proveedor===pv);
+    const agg={}; items.forEach(s=>{const k=s.insumo+"|"+s.unidad; agg[k]=(agg[k]||0)+s.stock;});
+    return '<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:800;color:#1A3C2E">'+pv+' <span style="color:#6b7280;font-weight:600">· '+Object.keys(agg).length+' insumos</span></div>'
+      +Object.entries(agg).sort((a,b)=>b[1]-a[1]).map(([k,v])=>{const [n,u]=k.split("|");return '<span class="st-chip"><b>'+n+'</b> · '+fmt(v,1)+' '+u+'</span>';}).join("")+'</div>';
+  }).join("") : '<div style="font-size:12px;color:#6b7280">Sin insumos en stock para el filtro elegido.</div>';
 
   const hayFiltroIns = ins.length > 0;
 
@@ -722,7 +847,7 @@ function renderStock(){
     ge("stock-charts-filtered").style.display = "none";
 
     // Gráfico global por productor
-    const bp={};DATA.stock.forEach(s=>{bp[s.productor]=(bp[s.productor]||0)+s.stock;});
+    const bp={};f.forEach(s=>{bp[s.productor]=(bp[s.productor]||0)+s.stock;});
     dC("ch-prod-global");
     charts["ch-prod-global"]=new Chart(ge("ch-prod-global"),{
       type:"doughnut",
@@ -731,7 +856,7 @@ function renderStock(){
     });
 
     // Top 10 insumos
-    const bi={};DATA.stock.filter(s=>s.stock>0).forEach(s=>{bi[s.insumo]=(bi[s.insumo]||0)+s.stock;});
+    const bi={};f.filter(s=>s.stock>0).forEach(s=>{bi[s.insumo]=(bi[s.insumo]||0)+s.stock;});
     const top=Object.entries(bi).sort((a,b)=>b[1]-a[1]).slice(0,10);
     dC("ch-ins-global");
     charts["ch-ins-global"]=new Chart(ge("ch-ins-global"),{
@@ -1917,71 +2042,53 @@ function renderKgSplit(kgLibre, kgPaga, kgSinDato){
 
 function renderStockGrano(){
   const fGrano = ge("fsg-grano")?.value||"";
-  const fProd  = ge("fsg-prod")?.value||"";
+  popSel("fsg-grano", [...new Set([...COSECHA_DATA.map(c=>c.grano),...STOCKGRANO_ACOPIO.map(r=>r.grano)])]);
+  mpRender("sg",[...Object.keys(PC),...STOCKGRANO_ACOPIO.map(r=>r.productor)]);
+  const fGr = ge("fsg-grano")?.value||"";
 
-  popSel("fsg-grano", [...new Set(COSECHA_DATA.map(c=>c.grano))]);
-  popSel("fsg-prod",  [...new Set(COSECHA_DATA.filter(c=>c.titular).map(c=>c.titular))]);
-
-  // Build acopio data from cosecha
   const ACOPIOS = ["CARGILL","AGD","GEA","PROTOIL"];
-  const acopioMap = {};
-  const siloMap   = {};
+  const granoColors = {TRIGO:"#C9A84C",SOJA:"#2D6A4F",MAIZ:"#E8A838","MAIZ FLINT":"#1A4D7C"};
 
-  COSECHA_DATA.forEach(c=>{
-    if(fGrano && c.grano!==fGrano) return;
-    if(fProd  && c.titular!==fProd) return;
+  // STOCK ACTUAL en acopios (hoja Stock Grano), filtrado por grano y productor(es)
+  const acRows = STOCKGRANO_ACOPIO.filter(r=>(!fGr||r.grano===fGr)&&mpHas("sg",r.productor));
+  renderAlmacenajeResumen(acRows);
 
-    const dest   = (c.destino||"").toUpperCase();
-    const planta = (c.planta||"").toUpperCase();
-    const kg     = c.kg_netos;
-
-    let acopio = null;
-    for(const a of ACOPIOS){
-      if(dest.includes(a)||planta.includes(a)){ acopio=a; break; }
+  // Silobolsas: kg restantes (si hay productores elegidos, proporcional a su parte de la bolsa)
+  const silos = SILOBOLSAS_DATA.filter(s=>!fGr||s.grano===fGr).map(s=>{
+    let share=1;
+    if(MP.sg.size && s.kg_campo>0){
+      let k=0;
+      MP.sg.forEach(p=>{ if(p.includes("HECTOR")) k+=s.kg_hector||0; else if(p.includes("SUCESION")) k+=s.kg_sucesion||0; else if(p.includes("PELIZZA")) k+=s.kg_pelizza||0; });
+      share=k/s.kg_campo;
     }
-
-    if(acopio){
-      const k = acopio+"|"+c.grano;
-      if(!acopioMap[k]) acopioMap[k]={acopio,grano:c.grano,kg:0,campos:new Set(),
-        titulares:{"CACIORGNA HECTOR":0,"PELIZZA JAVIER":0,"SUCESION CACIORGNA RAUL":0}};
-      acopioMap[k].kg += kg;
-      acopioMap[k].campos.add(c.campo);
-      if(c.titular && acopioMap[k].titulares.hasOwnProperty(c.titular))
-        acopioMap[k].titulares[c.titular] += kg;
-    } else {
-      const k = c.campo+"|"+c.grano;
-      if(!siloMap[k]) siloMap[k]={campo:c.campo,grano:c.grano,kg:0};
-      siloMap[k].kg += kg;
-    }
+    return {...s, kg_rest_f:(s.kg_restantes||0)*share};
   });
 
-  const acopioRows = Object.values(acopioMap).sort((a,b)=>a.acopio.localeCompare(b.acopio)||a.grano.localeCompare(b.grano));
-  const siloRows   = Object.values(siloMap).filter(r=>r.kg>0).sort((a,b)=>a.campo.localeCompare(b.campo));
-
-  const totAcopio = acopioRows.reduce((a,r)=>a+r.kg,0);
-  const totSilo   = siloRows.reduce((a,r)=>a+r.kg,0);
+  const totAcopio = acRows.reduce((a,r)=>a+(r.stock_actual||0),0);
+  const totSilo   = silos.reduce((a,r)=>a+r.kg_rest_f,0);
   const totGral   = totAcopio + totSilo;
+  const nPart = acRows.filter(r=>r.stock_actual>0).length;
 
   ge("kpi-sg").innerHTML =
-    '<div class="kpi" style="border-color:#2D6A4F"><div class="val">'+fmt(totGral/1000,1)+' tn</div><div class="lbl">Stock total cosechado</div></div>'+
-    '<div class="kpi" style="border-color:#1A4D7C"><div class="val">'+fmt(totAcopio/1000,1)+' tn</div><div class="lbl">En acopios</div></div>'+
-    '<div class="kpi" style="border-color:#C9A84C"><div class="val">'+fmt(totSilo/1000,1)+' tn</div><div class="lbl">En silobolsas/campo</div></div>'+
-    '<div class="kpi" style="border-color:#8B5E3C"><div class="val">'+acopioRows.length+'</div><div class="lbl">Lotes en acopio</div></div>';
+    '<div class="kpi" style="border-color:#2D6A4F"><div class="val">'+fmt(totGral/1000,1)+' tn</div><div class="lbl">Stock actual total</div></div>'+
+    '<div class="kpi" style="border-color:#1A4D7C"><div class="val">'+fmt(totAcopio/1000,1)+' tn</div><div class="lbl">Stock en acopios</div></div>'+
+    '<div class="kpi" style="border-color:#C9A84C"><div class="val">'+fmt(totSilo/1000,1)+' tn</div><div class="lbl">Stock en silobolsas</div></div>'+
+    '<div class="kpi" style="border-color:#8B5E3C"><div class="val">'+nPart+'</div><div class="lbl">Posiciones con stock en acopio</div></div>';
 
-  // Chart por acopio
+  // Chart: stock actual por acopio y grano
   const byAcopio = {};
-  const granos   = [...new Set(acopioRows.map(r=>r.grano))];
+  const granos   = [...new Set(acRows.filter(r=>r.stock_actual>0).map(r=>r.grano))];
   ACOPIOS.forEach(a=>{ byAcopio[a]={}; granos.forEach(g=>byAcopio[a][g]=0); });
-  acopioRows.forEach(r=>{ if(byAcopio[r.acopio]) byAcopio[r.acopio][r.grano]=(byAcopio[r.acopio][r.grano]||0)+r.kg; });
-  const granoColors = {TRIGO:"#C9A84C",SOJA:"#2D6A4F",MAIZ:"#E8A838","MAIZ FLINT":"#1A4D7C"};
+  acRows.forEach(r=>{ if(!byAcopio[r.acopio]){byAcopio[r.acopio]={};} byAcopio[r.acopio][r.grano]=(byAcopio[r.acopio][r.grano]||0)+(r.stock_actual||0); });
+  const acLabels=Object.keys(byAcopio).filter(a=>Object.values(byAcopio[a]).some(v=>v>0));
   dC("ch-sg-acopio");
   charts["ch-sg-acopio"] = new Chart(ge("ch-sg-acopio"),{
     type:"bar",
     data:{
-      labels:ACOPIOS.filter(a=>Object.values(byAcopio[a]).some(v=>v>0)),
+      labels:acLabels,
       datasets:granos.map(g=>({
         label:g, stack:"a",
-        data:ACOPIOS.filter(a=>Object.values(byAcopio[a]).some(v=>v>0)).map(a=>(byAcopio[a][g]||0)/1000),
+        data:acLabels.map(a=>(byAcopio[a][g]||0)/1000),
         backgroundColor:granoColors[g]||"#888", borderRadius:3
       }))
     },
@@ -1992,10 +2099,10 @@ function renderStockGrano(){
     }
   });
 
-  // Chart torta por grano
+  // Torta: stock actual por grano (acopios + silobolsas)
   const byGrano = {};
-  acopioRows.forEach(r=>{ byGrano[r.grano]=(byGrano[r.grano]||0)+r.kg; });
-  siloRows.forEach(r=>{ byGrano[r.grano]=(byGrano[r.grano]||0)+r.kg; });
+  acRows.forEach(r=>{ if(r.stock_actual>0) byGrano[r.grano]=(byGrano[r.grano]||0)+r.stock_actual; });
+  silos.forEach(r=>{ if(r.kg_rest_f>0) byGrano[r.grano]=(byGrano[r.grano]||0)+r.kg_rest_f; });
   dC("ch-sg-grano");
   charts["ch-sg-grano"] = new Chart(ge("ch-sg-grano"),{
     type:"doughnut",
@@ -2012,10 +2119,7 @@ function renderStockGrano(){
   // Acopio table — Stock en Acopios por Productor (fuente: hoja "Stock Grano")
   const acopioColors = {CARGILL:"#1A4D7C",AGD:"#8B5E3C",GEA:"#2D6A4F",PROTOIL:"#6B21A8"};
   const prodColors = {"CACIORGNA HECTOR":"#2D6A4F","SUCESION CACIORGNA RAUL":"#1A4D7C","PELIZZA JAVIER":"#8B5E3C"};
-  let acopioProdFiltered = STOCKGRANO_ACOPIO;
-  if(fGrano) acopioProdFiltered = acopioProdFiltered.filter(r=>r.grano===fGrano);
-  if(fProd)  acopioProdFiltered = acopioProdFiltered.filter(r=>r.productor===fProd);
-  acopioProdFiltered = acopioProdFiltered.filter(r=>r.entregado!==0);
+  let acopioProdFiltered = acRows.filter(r=>r.entregado!==0);
   acopioProdFiltered = acopioProdFiltered.slice().sort((a,b)=>
     a.productor.localeCompare(b.productor)||a.acopio.localeCompare(b.acopio)||a.grano.localeCompare(b.grano));
 
@@ -2057,8 +2161,7 @@ function renderStockGrano(){
 
   // Silobolsa table - use SILOBOLSAS_DATA directly
   const gBg2 = {TRIGO:"#FEF3C7",SOJA:"#D1FAE5",MAIZ:"#FED7AA","MAIZ FLINT":"#DBEAFE"};
-  let filteredSilos = SILOBOLSAS_DATA;
-  if(fGrano) filteredSilos = filteredSilos.filter(s=>s.grano===fGrano);
+  let filteredSilos = silos;
   ge("tb-sg-sb").innerHTML = filteredSilos.map(s=>'<tr>'
     +'<td><strong>'+s.nombre+'</strong></td>'
     +'<td><span class="badge" style="background:'+(gBg2[s.grano]||"#F3F4F6")+';color:#374151">'+s.grano+'</span></td>'
