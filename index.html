@@ -658,6 +658,35 @@ function renderHome(){
 }
 
 
+
+// Plugin propio: número dentro de cada barra (opciones: plugins.valueLabels={fmt:fn,min:px})
+Chart.register({
+  id:"valueLabels",
+  afterDatasetsDraw(chart,args,opts){
+    if(!opts||opts===false) return;
+    const ctx=chart.ctx, horiz=chart.options.indexAxis==="y", f=opts.fmt||(v=>String(v));
+    chart.data.datasets.forEach((ds,di)=>{
+      const meta=chart.getDatasetMeta(di); if(meta.hidden) return;
+      meta.data.forEach((bar,i)=>{
+        const v=ds.data[i]; if(!v||v<=0) return;
+        const txt=f(v,ds,i); ctx.save();
+        ctx.font="bold 11px Segoe UI, system-ui, sans-serif"; ctx.textBaseline="middle";
+        const w=ctx.measureText(txt).width+8;
+        const size=horiz?Math.abs(bar.x-bar.base):Math.abs(bar.base-bar.y);
+        const thick=horiz?bar.height:bar.width;
+        if(thick<12){ctx.restore();return;}
+        if(horiz){
+          if(size>=w){ctx.fillStyle="#fff";ctx.textAlign="center";ctx.fillText(txt,(bar.x+bar.base)/2,bar.y);}
+          else{ctx.fillStyle="#1A3C2E";ctx.textAlign="left";ctx.fillText(txt,bar.x+4,bar.y);}
+        } else {
+          if(size>=14){ctx.fillStyle="#fff";ctx.textAlign="center";ctx.fillText(txt,bar.x,(bar.y+bar.base)/2);}
+        }
+        ctx.restore();
+      });
+    });
+  }
+});
+
 // ══ Selector de productor (uno o varios) ═══════════════════════════════════
 const MP={stock:new Set(),sg:new Set()};
 const MP_CB={stock:()=>renderStock(),sg:()=>renderStockGrano()};
@@ -708,7 +737,6 @@ function renderAlmacenajeResumen(rows){
   const box=ge("sg-alertas"); if(!box) return;
   const ev=almacenajeEventos(rows);
   const paga=ev.filter(e=>e.dias<0 && e.tipo==="libre").sort((a,b)=>a.dias-b.dias);
-  const fijV=ev.filter(e=>e.dias<0 && e.tipo==="fijacion").sort((a,b)=>a.dias-b.dias);
   const prox=ev.filter(e=>e.dias>=0).sort((a,b)=>a.dias-b.dias);
   const sum=a=>a.reduce((x,e)=>x+e.kg,0);
   const kpi=(c,bg,v,l)=>'<div class="al-kpi" style="border-color:'+c+';background:'+bg+'"><b style="color:'+c+'">'+v+'</b>'+l+'</div>';
@@ -733,7 +761,6 @@ function renderAlmacenajeResumen(rows){
       }).join("")+'</tbody></table></div>';
   };
   h+=tabla("🔴 Pagando almacenaje (venció el almacenaje libre)","#DC2626",paga,"Venció")
-    +tabla("🟠 Fecha máxima de fijación vencida","#B45309",fijV,"Venció")
     +tabla("⏳ Próximos a vencer (ordenados por urgencia)","#1A3C2E",prox,"Vence");
   if(!ev.length) h+='<div style="font-size:12px;color:#6b7280">No hay fechas de almacenaje cargadas en "Condiciones" para el stock actual.</div>';
   box.innerHTML=h;
@@ -783,23 +810,26 @@ function renderStock(){
     <div class="kpi" style="border-color:#8B5E3C"><div class="val">${fmt(tR,0)}</div><div class="lbl">Total retirado</div></div>
     <div class="kpi" style="border-color:#C9A84C"><div class="val" style="color:#059669">${fmt(tC-tR,0)}</div><div class="lbl">Stock disponible</div></div>`;
 
-  // ── Gráfico de barras por proveedor/acopio, apilado por insumo con stock ──
+  // ── Barras horizontales: una barra por proveedor/acopio + insumo con stock ──
   const stk=f.filter(s=>s.stock>0);
-  const provs=[...new Set(stk.map(s=>s.proveedor))].sort();
-  const insList=[...new Set(stk.map(s=>s.insumo))].sort();
-  const pal=["#1A3C2E","#2D6A4F","#52B788","#C9A84C","#E8A838","#8B5E3C","#1A4D7C","#6B21A8","#B5342A","#0E7490","#65A30D","#9333EA","#F97316","#64748B"];
-  const unidadOf={}; stk.forEach(s=>{unidadOf[s.insumo]=s.unidad;});
+  const agg={};
+  stk.forEach(s=>{const k=s.proveedor+"|"+s.insumo+"|"+s.unidad; agg[k]=(agg[k]||0)+s.stock;});
+  const rowsC=Object.entries(agg).map(([k,v])=>{const [pv,n,u]=k.split("|");return {pv,n,u,v};})
+    .sort((a,b)=>a.pv.localeCompare(b.pv)||b.v-a.v);
+  const provs=[...new Set(rowsC.map(r=>r.pv))].sort();
+  const pal=["#1A3C2E","#2D6A4F","#C9A84C","#1A4D7C","#8B5E3C","#6B21A8","#0E7490","#B5342A","#65A30D","#F97316"];
+  const wrap=ge("ch-stprov-wrap"); if(wrap) wrap.style.height=Math.max(180,rowsC.length*26+40)+"px";
   dC("ch-stprov");
   charts["ch-stprov"]=new Chart(ge("ch-stprov"),{
     type:"bar",
-    data:{labels:provs,datasets:insList.map((n,i)=>({
-      label:n,stack:"s",backgroundColor:pal[i%pal.length],
-      data:provs.map(pv=>stk.filter(s=>s.proveedor===pv&&s.insumo===n).reduce((a,s)=>a+s.stock,0))
-    }))},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},
-        tooltip:{filter:it=>it.raw>0,callbacks:{label:c=>" "+c.dataset.label+": "+fmt(c.raw,1)+" "+(unidadOf[c.dataset.label]||"")}}},
-      scales:{x:{stacked:true,ticks:{font:{size:11,weight:"bold"}}},y:{stacked:true,grid:{color:"#eee"},ticks:{callback:v=>fmt(v,0)}}}
+    data:{labels:rowsC.map(r=>r.pv+" · "+r.n.substring(0,34)),datasets:[{
+      label:"Stock",data:rowsC.map(r=>r.v),
+      backgroundColor:rowsC.map(r=>pal[provs.indexOf(r.pv)%pal.length]),borderRadius:3}]},
+    options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,
+      layout:{padding:{right:50}},
+      plugins:{legend:{display:false},valueLabels:{fmt:(v,ds,i)=>fmt(v,0)+" "+rowsC[i].u},
+        tooltip:{callbacks:{label:c=>" "+fmt(c.raw,1)+" "+rowsC[c.dataIndex].u}}},
+      scales:{x:{grid:{color:"#eee"},ticks:{callback:v=>fmt(v,0)}},y:{ticks:{font:{size:10}}}}
     }
   });
   ge("stprov-list").innerHTML = provs.length ? provs.map(pv=>{
@@ -866,7 +896,7 @@ function renderStock(){
       }]},
       options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,
         layout:{padding:{right:50}},
-        plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>" "+fmt(ctx.raw,1)}}},
+        plugins:{legend:{display:false},valueLabels:{fmt:v=>fmt(v,0)},tooltip:{callbacks:{label:ctx=>" "+fmt(ctx.raw,1)}}},
         scales:{x:{grid:{color:"#eee"},ticks:{callback:v=>fmt(v,0)}},y:{ticks:{font:{size:9}}}}
       }
     });
@@ -2093,7 +2123,7 @@ function renderStockGrano(){
       }))
     },
     options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:"bottom",labels:{font:{size:10}}},
+      plugins:{legend:{position:"bottom",labels:{font:{size:10}}},valueLabels:{fmt:v=>fmt(v,1)+" tn"},
         tooltip:{callbacks:{label:ctx=>ctx.dataset.label+": "+fmt(ctx.raw,1)+" tn"}}},
       scales:{x:{stacked:true,ticks:{font:{size:10}}},y:{stacked:true,grid:{color:"#eee"},ticks:{callback:v=>fmt(v,0)+" tn"}}}
     }
