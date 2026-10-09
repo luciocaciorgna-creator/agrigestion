@@ -677,13 +677,23 @@ Chart.register({
         if(thick<12){ctx.restore();return;}
         if(horiz){
           if(size>=w){ctx.fillStyle="#fff";ctx.textAlign="center";ctx.fillText(txt,(bar.x+bar.base)/2,bar.y);}
-          else{ctx.fillStyle="#1A3C2E";ctx.textAlign="left";ctx.fillText(txt,bar.x+4,bar.y);}
+          else if(!opts.totalFmt){ctx.fillStyle="#1A3C2E";ctx.textAlign="left";ctx.fillText(txt,bar.x+4,bar.y);}
         } else {
           if(size>=14){ctx.fillStyle="#fff";ctx.textAlign="center";ctx.fillText(txt,bar.x,(bar.y+bar.base)/2);}
         }
         ctx.restore();
       });
     });
+    if(opts.totalFmt && horiz){
+      const n=chart.data.labels.length;
+      for(let i=0;i<n;i++){
+        let xe=null,y=null;
+        chart.data.datasets.forEach((ds,di)=>{ if(ds.data[i]>0){const b=chart.getDatasetMeta(di).data[i]; if(xe===null||b.x>xe){xe=b.x;} y=b.y;} });
+        if(xe===null) continue;
+        ctx.save(); ctx.font="bold 11px Segoe UI, system-ui, sans-serif"; ctx.textBaseline="middle"; ctx.textAlign="left";
+        ctx.fillStyle="#1A3C2E"; ctx.fillText(opts.totalFmt(i),xe+5,y); ctx.restore();
+      }
+    }
   }
 });
 
@@ -810,33 +820,39 @@ function renderStock(){
     <div class="kpi" style="border-color:#8B5E3C"><div class="val">${fmt(tR,0)}</div><div class="lbl">Total retirado</div></div>
     <div class="kpi" style="border-color:#C9A84C"><div class="val" style="color:#059669">${fmt(tC-tR,0)}</div><div class="lbl">Stock disponible</div></div>`;
 
-  // ── Barras horizontales: una barra por proveedor/acopio + insumo con stock ──
-  const stk=f.filter(s=>s.stock>0);
-  const agg={};
-  stk.forEach(s=>{const k=s.proveedor+"|"+s.insumo+"|"+s.unidad; agg[k]=(agg[k]||0)+s.stock;});
-  const rowsC=Object.entries(agg).map(([k,v])=>{const [pv,n,u]=k.split("|");return {pv,n,u,v};})
-    .sort((a,b)=>a.pv.localeCompare(b.pv)||b.v-a.v);
-  const provs=[...new Set(rowsC.map(r=>r.pv))].sort();
-  const pal=["#1A3C2E","#2D6A4F","#C9A84C","#1A4D7C","#8B5E3C","#6B21A8","#0E7490","#B5342A","#65A30D","#F97316"];
-  const wrap=ge("ch-stprov-wrap"); if(wrap) wrap.style.height=Math.max(180,rowsC.length*26+40)+"px";
+  // ── Barras horizontales: una barra por proveedor/acopio + insumo, apilada por productor ──
+  // Los fertilizantes (KG) se expresan en tn para no distorsionar la escala.
+  const conv=s=>(s.tipo==="FERTILIZANTE"&&String(s.unidad).toUpperCase()==="KG")?{f:1/1000,u:"TN"}:{f:1,u:s.unidad};
+  const stk=f.filter(s=>s.stock>0).map(s=>{const c=conv(s);return {...s,stockC:s.stock*c.f,unidadC:c.u};});
+  const prodsC=[...new Set(stk.map(s=>s.productor))].sort();
+  const keyOf=s=>s.proveedor+"|"+s.insumo+"|"+s.unidadC;
+  const keys=[...new Set(stk.map(keyOf))].map(k=>{const [pv,n,u]=k.split("|");return {k,pv,n,u};})
+    .sort((a,b)=>a.pv.localeCompare(b.pv)||a.n.localeCompare(b.n));
+  const val=(k,p)=>stk.filter(s=>keyOf(s)===k&&s.productor===p).reduce((a,s)=>a+s.stockC,0);
+  keys.forEach(r=>{r.tot=prodsC.reduce((a,p)=>a+val(r.k,p),0);});
+  keys.sort((a,b)=>a.pv.localeCompare(b.pv)||b.tot-a.tot);
+  const fm=(v,u)=>fmt(v,u==="TN"?2:0)+" "+u;
+  const wrap=ge("ch-stprov-wrap"); if(wrap) wrap.style.height=Math.max(200,keys.length*26+70)+"px";
   dC("ch-stprov");
   charts["ch-stprov"]=new Chart(ge("ch-stprov"),{
     type:"bar",
-    data:{labels:rowsC.map(r=>r.pv+" · "+r.n.substring(0,34)),datasets:[{
-      label:"Stock",data:rowsC.map(r=>r.v),
-      backgroundColor:rowsC.map(r=>pal[provs.indexOf(r.pv)%pal.length]),borderRadius:3}]},
+    data:{labels:keys.map(r=>r.pv+" · "+r.n.substring(0,34)),
+      datasets:prodsC.map(p=>({label:p,stack:"p",backgroundColor:PC[p]||"#888",borderRadius:2,
+        data:keys.map(r=>val(r.k,p))}))},
     options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,
-      layout:{padding:{right:50}},
-      plugins:{legend:{display:false},valueLabels:{fmt:(v,ds,i)=>fmt(v,0)+" "+rowsC[i].u},
-        tooltip:{callbacks:{label:c=>" "+fmt(c.raw,1)+" "+rowsC[c.dataIndex].u}}},
-      scales:{x:{grid:{color:"#eee"},ticks:{callback:v=>fmt(v,0)}},y:{ticks:{font:{size:10}}}}
+      layout:{padding:{right:110}},
+      plugins:{legend:{position:"top",labels:{font:{size:11}}},
+        valueLabels:{fmt:(v,ds,i)=>fmt(v,keys[i].u==="TN"?1:0),totalFmt:i=>"= "+fm(keys[i].tot,keys[i].u)},
+        tooltip:{callbacks:{label:c=>" "+c.dataset.label+": "+fm(c.raw,keys[c.dataIndex].u),
+          footer:items=>{const r=keys[items[0].dataIndex];return "Total: "+fm(r.tot,r.u);}}}},
+      scales:{x:{stacked:true,grid:{color:"#eee"},ticks:{callback:v=>fmt(v,0)}},y:{stacked:true,ticks:{font:{size:10}}}}
     }
   });
+  const provs=[...new Set(keys.map(r=>r.pv))].sort();
   ge("stprov-list").innerHTML = provs.length ? provs.map(pv=>{
-    const items=stk.filter(s=>s.proveedor===pv);
-    const agg={}; items.forEach(s=>{const k=s.insumo+"|"+s.unidad; agg[k]=(agg[k]||0)+s.stock;});
-    return '<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:800;color:#1A3C2E">'+pv+' <span style="color:#6b7280;font-weight:600">· '+Object.keys(agg).length+' insumos</span></div>'
-      +Object.entries(agg).sort((a,b)=>b[1]-a[1]).map(([k,v])=>{const [n,u]=k.split("|");return '<span class="st-chip"><b>'+n+'</b> · '+fmt(v,1)+' '+u+'</span>';}).join("")+'</div>';
+    const items=keys.filter(r=>r.pv===pv);
+    return '<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:800;color:#1A3C2E">'+pv+' <span style="color:#6b7280;font-weight:600">· '+items.length+' insumos</span></div>'
+      +items.map(r=>'<span class="st-chip"><b>'+r.n+'</b> · '+fm(r.tot,r.u)+'</span>').join("")+'</div>';
   }).join("") : '<div style="font-size:12px;color:#6b7280">Sin insumos en stock para el filtro elegido.</div>';
 
   const hayFiltroIns = ins.length > 0;
@@ -846,7 +862,6 @@ function renderStock(){
     ge("stock-charts-global").style.display = "none";
     ge("stock-charts-filtered").style.display = "block";
 
-    const insNombre = f.length > 0 ? f[0].insumo : ins;
     ge("ch-prov-title").textContent = `Stock por Proveedor`;
     ge("ch-prod-title").textContent = `Stock por Productor`;
 
