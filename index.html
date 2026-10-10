@@ -804,7 +804,7 @@ function sortTable(tableId, colIdx, numeric=false){
 }
 // ── STOCK ─────────────────────────────────────────────────────────────────────
 // Fertilizantes (MAP, arrancadores, urea y demás tipo FERTILIZANTE en KG) se muestran en toneladas
-function esFertKg(s){ return String(s.unidad||"").toUpperCase()==="KG" && (s.tipo==="FERTILIZANTE" || /^(MAP|UREA|ARRANCADOR)/i.test(s.insumo||"")); }
+function esFertKg(s){ const u=String(s.unidad||"").toUpperCase(); return (u==="KG"||u==="KGS"||u==="") && (s.tipo==="FERTILIZANTE" || /^(MAP\b|UREA|ARRANCADOR|FOSFATO|SULFATO DE AMONIO|SUPERFOSFATO)/i.test(s.insumo||"")); }
 function renderStock(){
   const SD=DATA.stock.map(s=>esFertKg(s)?{...s,comprado:s.comprado/1000,retirado:s.retirado/1000,stock:s.stock/1000,unidad:"TN",_tn:true}:s);
   const ins=gV("f-ins").toLowerCase(), prov=gV("f-prov");
@@ -2273,9 +2273,10 @@ function renderMargenBruto(){
     const last = ["2627","2526"].find(c=>MARGEN_DATA.some(r=>(r.campania||"2526")===c));
     if(last) campSel.value = last;
   }
-  const camp = campSel?.value||"2627";
+  const camp = campSel ? campSel.value : "2627";
   const campLabel = {"2526":"25-26","2627":"26-27"};
-  const MD = MARGEN_DATA.filter(r=>(r.campania||"2526")===camp);
+  const todasCamp = camp==="";
+  const MD = MARGEN_DATA.filter(r=>todasCamp || (r.campania||"2526")===camp);
 
   popSel("fmg-cult", MD.map(r=>r.cultivo));
   popSel("fmg-lote", MD.map(r=>r.lote));
@@ -2283,7 +2284,7 @@ function renderMargenBruto(){
   const nd = ge("mg-nodata");
   if(nd){
     nd.style.display = MD.length ? "none" : "block";
-    nd.innerHTML = "ℹ️ Todavía no hay datos de margen bruto para la campaña "+campLabel[camp]+"."+(camp==="2627"?" Cuando tengas la hoja de la campaña 26-27, pasame el link y las pestañas (gid) para conectarla.":"");
+    nd.innerHTML = "ℹ️ Todavía no hay datos de margen bruto para la campaña "+(campLabel[camp]||"")+"."+(camp==="2627"?" Cuando tengas la hoja de la campaña 26-27, pasame el link y las pestañas (gid) para conectarla.":"");
   }
 
   // ── Gráfico de líneas: MB U$D/Ha por cultivo, comparando campañas (promedio ponderado por ha) ──
@@ -2332,6 +2333,7 @@ function renderMargenBruto(){
 
   // ── Chart 1: MB U$D/Ha por lote, apilando los cultivos de un mismo lote ──────
   // (así Trigo + Soja 2° en el mismo lote se ven como una sola barra combinada)
+  const r_c = x=>(x.campania||"2526");
   const lotesOrden = [...new Set(f.map(r=>r.lote))].sort();
   const cultivosPresentes = [...new Set(f.map(r=>r.cultivo))];
   const ordenCultivos = ["SOJA 1°","MAIZ","TRIGO","SOJA 2°"].filter(c=>cultivosPresentes.includes(c));
@@ -2340,15 +2342,15 @@ function renderMargenBruto(){
     type:"bar",
     data:{
       labels: lotesOrden,
-      datasets: ordenCultivos.map(cv=>({
-        label: cv,
+      datasets: (todasCamp?["2526","2627"]:[camp]).flatMap(cp=>ordenCultivos.map(cv=>({
+        label: cv+(todasCamp?" "+campLabel[cp]:""),
         data: lotesOrden.map(lt=>{
-          const r = f.find(x=>x.lote===lt && x.cultivo===cv);
+          const r = f.find(x=>x.lote===lt && x.cultivo===cv && (r_c(x)===cp));
           return r ? r.mb_ha : 0;
         }),
-        backgroundColor: granoColMap[cv]||"#888",
-        borderRadius: 3, stack: "mb"
-      }))
+        backgroundColor: (granoColMap[cv]||"#888")+(todasCamp&&cp==="2526"?"99":""),
+        borderRadius: 3, stack: "mb"+cp
+      }))).filter(ds=>ds.data.some(v=>v!==0))
     },
     options:{
       responsive:true, maintainAspectRatio:false,
@@ -2366,9 +2368,10 @@ function renderMargenBruto(){
   // como Trigo+Soja2°, se suman), para que el total de la barra sea el Ingreso Neto.
   const porLoteComp = {};
   f.forEach(r=>{
-    if(!porLoteComp[r.lote]) porLoteComp[r.lote] = {lote:r.lote,
+    const kk = todasCamp ? r.lote+" · "+campLabel[r_c(r)] : r.lote;
+    if(!porLoteComp[kk]) porLoteComp[kk] = {lote:kk,
       arrendamiento:0,labores:0,semilla:0,fertilizante:0,agroquimicos:0,seguro:0,administracion:0,cosecha:0,mb:0,ingreso_neto:0};
-    const p = porLoteComp[r.lote];
+    const p = porLoteComp[kk];
     p.arrendamiento += r.arrendamiento||0;
     p.labores       += r.labores||0;
     p.semilla       += r.semilla||0;
@@ -2418,7 +2421,7 @@ function renderMargenBruto(){
 
   ge("tb-margen").innerHTML = f.length ? f.map(r=>`<tr>
       <td><strong>${r.lote}</strong></td>
-      <td><span class="badge" style="background:${(granoColMap[r.cultivo]||"#888")}20;color:${granoColMap[r.cultivo]||"#888"};font-weight:800">${r.cultivo}</span></td>
+      <td><span class="badge" style="background:${(granoColMap[r.cultivo]||"#888")}20;color:${granoColMap[r.cultivo]||"#888"};font-weight:800">${r.cultivo}</span>${todasCamp?` <span style="font-size:10px;color:#6b7280">${campLabel[r_c(r)]}</span>`:""}</td>
       <td style="text-align:right">${fmt(r.ha,1)}</td>
       <td style="text-align:right;font-weight:700;color:${r.mb_ha>=0?"#059669":"#DC2626"}">${fmtU(r.mb_ha)}</td>
       <td style="text-align:right;font-weight:800;color:#1A3C2E">${fmtU(r.mb_total)}</td>
@@ -2454,17 +2457,24 @@ function renderFacturacion(){
     return true;
   };
 
+  // Ha que corresponden al productor elegido (si no hay productor, son las ha totales de la labor)
+  const haEf = (x)=>{
+    if(prod==="CACIORGNA HECTOR") return x.ha_hector||0;
+    if(prod==="SUCESION CACIORGNA RAUL") return x.ha_sucesion||0;
+    if(prod==="PELIZZA JAVIER") return x.ha_javier||0;
+    return x.ha_totales||0;
+  };
   const f = FACTURACION_DATA.filter(x=>
     (!cont ||x.contratista===cont) &&
     (!loteF||x.lote===loteF) &&
     (!tipoF||x.tipo===tipoF) &&
     (!estado || (estado==="pendiente" ? !x.facturado : x.facturado)) &&
     prodTieneHa(x)
-  ).map(x=>({...x, monto_ars:x.ha_totales*x.precio_ars_ha, monto_usd:x.ha_totales*x.precio_usd_ha}))
+  ).map(x=>({...x, ha_ef:haEf(x), monto_ars:haEf(x)*x.precio_ars_ha, monto_usd:haEf(x)*x.precio_usd_ha}))
    .sort((a,b)=>b.fecha.localeCompare(a.fecha));
 
   const pendientes = f.filter(x=>!x.facturado);
-  const totHaPend  = pendientes.reduce((a,x)=>a+x.ha_totales,0);
+  const totHaPend  = pendientes.reduce((a,x)=>a+x.ha_ef,0);
   const totArsPend = pendientes.reduce((a,x)=>a+x.monto_ars,0);
   const totUsdPend = pendientes.reduce((a,x)=>a+x.monto_usd,0);
 
@@ -2482,9 +2492,9 @@ function renderFacturacion(){
   baseContratista.forEach(x=>{
     if(!porCont[x.contratista]) porCont[x.contratista]={contratista:x.contratista, n:0, ha:0, ars:0, usd:0};
     porCont[x.contratista].n++;
-    porCont[x.contratista].ha  += x.ha_totales;
-    porCont[x.contratista].ars += x.ha_totales*x.precio_ars_ha;
-    porCont[x.contratista].usd += x.ha_totales*x.precio_usd_ha;
+    porCont[x.contratista].ha  += haEf(x);
+    porCont[x.contratista].ars += haEf(x)*x.precio_ars_ha;
+    porCont[x.contratista].usd += haEf(x)*x.precio_usd_ha;
   });
   const contRows = Object.values(porCont).sort((a,b)=>b.ha-a.ha);
   // Dentro de cada contratista, se desglosa lo pendiente por labor (tipo de labor)
@@ -2492,7 +2502,7 @@ function renderFacturacion(){
   baseContratista.forEach(x=>{
     const k=x.contratista+"|"+(x.tipo||"Sin tipo");
     if(!porLabor[k]) porLabor[k]={contratista:x.contratista,tipo:x.tipo||"Sin tipo",n:0,ha:0,ars:0,usd:0};
-    const o=porLabor[k]; o.n++; o.ha+=x.ha_totales; o.ars+=x.ha_totales*x.precio_ars_ha; o.usd+=x.ha_totales*x.precio_usd_ha;
+    const o=porLabor[k]; o.n++; o.ha+=haEf(x); o.ars+=haEf(x)*x.precio_ars_ha; o.usd+=haEf(x)*x.precio_usd_ha;
   });
   const cell=(v,fn)=>v>0?fn(v):"—";
   ge("tb-fact-cont").innerHTML = contRows.length ? contRows.map(c=>{
@@ -2827,10 +2837,16 @@ function parseMargenSheet(rawRows, cultivoLabel){
     }
   });
   if(grupos.length===0) return out;
-  function findRow(labelExacto){
+  // Busca la fila por su rótulo. Primero coincidencia exacta; si no, que EMPIECE con ese texto
+  // (así "LABORES 2627 (campaña actual)" se reconoce igual que "LABORES").
+  function findRow(label){
     for(let i=campoRowIdx;i<rawRows.length;i++){
-      const c1 = String(rawRows[i][1]||"").trim().toUpperCase();
-      if(c1===labelExacto) return rawRows[i];
+      if(String(rawRows[i][1]||"").trim().toUpperCase()===label) return rawRows[i];
+    }
+    if(label==="MB"||label==="HAS:"||label==="EGRESOS") return null;
+    for(let i=campoRowIdx;i<rawRows.length;i++){
+      const c1=String(rawRows[i][1]||"").trim().toUpperCase();
+      if(c1.startsWith(label+" ")||c1.startsWith(label+"(")) return rawRows[i];
     }
     return null;
   }
@@ -3046,7 +3062,7 @@ async function loadFromSheets() {
       compras.push({
         fecha:String(r[0]||"").substring(0,10),
         productor:String(r[1]||""), proveedor:String(r[2]||""),
-        remito:String(r[3]||""), insumo:String(r[4]||""),
+        remito:String(r[3]||""), insumo:String(r[4]||""), unidad:String(r[5]||"").trim().toUpperCase(),
         cantidad:parseNum(r[6])||0, precio:parseNum(r[7])||0
       });
     });
@@ -3185,15 +3201,21 @@ async function loadFromSheets() {
     }).sort((a,b)=>b.fecha.localeCompare(a.fecha));
 
     // Stock calculado desde compras y retiros
+    // La hoja no trae "tipo": se deduce por el nombre (fertilizantes: MAP, UREA, ARRANCADOR, etc.)
+    const esFertNombre = n => /^(MAP\b|UREA|ARRANCADOR|FOSFATO|SULFATO DE AMONIO|SUPERFOSFATO)/i.test(String(n||"").trim());
+    const unidadValida = u => /^(KGS?|LTS?|L|LITROS?|BLS|BOLSAS?|PACK|UN|UNIDADES?)$/i.test(u||"");
     const sMap={};
+    const nuevoStock=(x)=>({productor:x.productor,proveedor:x.proveedor,insumo:x.insumo,
+      tipo:esFertNombre(x.insumo)?"FERTILIZANTE":"", unidad:esFertNombre(x.insumo)?"KG":"",comprado:0,retirado:0,stock:0});
     compras.forEach(c=>{
       const k=c.productor+"|"+c.proveedor+"|"+c.insumo;
-      if(!sMap[k]) sMap[k]={productor:c.productor,proveedor:c.proveedor,insumo:c.insumo,tipo:"",unidad:"",comprado:0,retirado:0,stock:0};
+      if(!sMap[k]) sMap[k]=nuevoStock(c);
+      if(unidadValida(c.unidad)) sMap[k].unidad=c.unidad.toUpperCase().replace(/^KGS$/,"KG").replace(/^(LTS|L|LITROS?)$/,"LT");
       sMap[k].comprado+=c.cantidad;
     });
     retiros.forEach(r=>{
       const k=r.productor+"|"+r.proveedor+"|"+r.insumo;
-      if(!sMap[k]) sMap[k]={productor:r.productor,proveedor:r.proveedor,insumo:r.insumo,tipo:"",unidad:"",comprado:0,retirado:0,stock:0};
+      if(!sMap[k]) sMap[k]=nuevoStock(r);
       sMap[k].retirado+=r.cantidad;
     });
     Object.values(sMap).forEach(s=>s.stock=s.comprado-s.retirado);
@@ -3733,7 +3755,7 @@ loadFromSheets();
   <div class="kpi-row" id="kpi-margen"></div>
   <div class="filters">
     <div><label>Campaña</label><select id="fmg-camp" onchange="this.dataset.touched=1;renderMargenBruto()">
-      <option value="2627">Campaña 26-27 (actual)</option><option value="2526">Campaña 25-26</option></select></div>
+      <option value="">Todas las campañas</option><option value="2627">Campaña 26-27 (actual)</option><option value="2526">Campaña 25-26</option></select></div>
     <div><label>Cultivo</label><select id="fmg-cult" onchange="renderMargenBruto()"><option value="">Todos</option></select></div>
     <div><label>Lote</label><select id="fmg-lote" onchange="renderMargenBruto()"><option value="">Todos</option></select></div>
     <button class="btn-cl" onclick="clrF(['fmg-cult','fmg-lote'],renderMargenBruto)">✕ Limpiar</button>
