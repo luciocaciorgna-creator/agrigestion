@@ -293,9 +293,10 @@ tbody td{padding:7px 11px;border-bottom:1px solid #EDE9E1;vertical-align:middle}
   <div class="kpi-row" id="kpi-labores"></div>
   <div class="filters">
     <div><label>Lote</label><select id="fl-lote" onchange="renderLabores()"><option value="">Todos</option></select></div>
+    <div><label>Cultivo</label><select id="fl-cult" onchange="renderLabores()"><option value="">Todos</option></select></div>
     <div><label>Tipo</label><select id="fl-tipo" onchange="renderLabores()"><option value="">Todos</option></select></div>
     <div><label>Contratista</label><select id="fl-cont" onchange="renderLabores()"><option value="">Todos</option></select></div>
-    <button class="btn-cl" onclick="clrF(['fl-lote','fl-tipo','fl-cont'],renderLabores)">✕</button>
+    <button class="btn-cl" onclick="clrF(['fl-lote','fl-cult','fl-tipo','fl-cont'],renderLabores)">✕</button>
   </div>
   <p style="font-size:11px;color:#6b7280;margin:-6px 0 10px">Elegí un lote para ver sus labores una por una con los insumos ya abiertos. Sin elegir lote, se agrupan igual por lote pero con los insumos plegados.</p>
   <div class="card"><h3>Costo por lote — M.O. + Insumos (USD/ha)</h3><div class="chart-wrap"><canvas id="ch-lab"></canvas></div></div>
@@ -663,7 +664,7 @@ function renderHome(){
 Chart.register({
   id:"valueLabels",
   afterDatasetsDraw(chart,args,opts){
-    if(!opts||opts===false) return;
+    if(!opts||!opts.fmt) return;
     const ctx=chart.ctx, horiz=chart.options.indexAxis==="y", f=opts.fmt||(v=>String(v));
     chart.data.datasets.forEach((ds,di)=>{
       const meta=chart.getDatasetMeta(di); if(meta.hidden) return;
@@ -802,11 +803,14 @@ function sortTable(tableId, colIdx, numeric=false){
   });
 }
 // ── STOCK ─────────────────────────────────────────────────────────────────────
+// Fertilizantes (MAP, arrancadores, urea y demás tipo FERTILIZANTE en KG) se muestran en toneladas
+function esFertKg(s){ return String(s.unidad||"").toUpperCase()==="KG" && (s.tipo==="FERTILIZANTE" || /^(MAP|UREA|ARRANCADOR)/i.test(s.insumo||"")); }
 function renderStock(){
+  const SD=DATA.stock.map(s=>esFertKg(s)?{...s,comprado:s.comprado/1000,retirado:s.retirado/1000,stock:s.stock/1000,unidad:"TN",_tn:true}:s);
   const ins=gV("f-ins").toLowerCase(), prov=gV("f-prov");
-  mpRender("stock",DATA.stock.map(s=>s.productor));
-  popSel("f-prov",DATA.stock.map(s=>s.proveedor));
-  const f=DATA.stock.filter(s=>
+  mpRender("stock",SD.map(s=>s.productor));
+  popSel("f-prov",SD.map(s=>s.proveedor));
+  const f=SD.filter(s=>
     (!ins||s.insumo.toLowerCase().includes(ins))&&
     mpHas("stock",s.productor)&&(!prov||s.proveedor===prov)
   );
@@ -901,17 +905,17 @@ function renderStock(){
     });
 
     // Top 10 insumos
-    const bi={};f.filter(s=>s.stock>0).forEach(s=>{bi[s.insumo]=(bi[s.insumo]||0)+s.stock;});
+    const bi={},biU={};f.filter(s=>s.stock>0).forEach(s=>{bi[s.insumo]=(bi[s.insumo]||0)+s.stock;biU[s.insumo]=s.unidad;});
     const top=Object.entries(bi).sort((a,b)=>b[1]-a[1]).slice(0,10);
     dC("ch-ins-global");
     charts["ch-ins-global"]=new Chart(ge("ch-ins-global"),{
       type:"bar",
-      data:{labels:top.map(x=>x[0].substring(0,22)),datasets:[{label:"Stock",data:top.map(x=>x[1]),backgroundColor:"#52B788",borderRadius:3,
+      data:{labels:top.map(x=>x[0].substring(0,22)+" ("+(biU[x[0]]||"")+")"),datasets:[{label:"Stock",data:top.map(x=>x[1]),backgroundColor:"#52B788",borderRadius:3,
         datalabels:{anchor:"end",align:"right",color:"#1A3C2E",font:{weight:"bold",size:10},formatter:v=>fmt(v,0)}
       }]},
       options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,
         layout:{padding:{right:50}},
-        plugins:{legend:{display:false},valueLabels:{fmt:v=>fmt(v,0)},tooltip:{callbacks:{label:ctx=>" "+fmt(ctx.raw,1)}}},
+        plugins:{legend:{display:false},valueLabels:{fmt:v=>fmt(v,v<100?1:0)},tooltip:{callbacks:{label:ctx=>" "+fmt(ctx.raw,1)}}},
         scales:{x:{grid:{color:"#eee"},ticks:{callback:v=>fmt(v,0)}},y:{ticks:{font:{size:9}}}}
       }
     });
@@ -922,9 +926,9 @@ function renderStock(){
     <td><span class="badge bg-trigo">${s.tipo||"—"}</span></td>
     <td><span class="dot" style="background:${PC[s.productor]||"#ccc"}"></span>${s.productor}</td>
     <td>${s.proveedor}</td><td style="color:#6b7280">${s.unidad}</td>
-    <td style="text-align:right">${fmt(s.comprado)}</td>
-    <td style="text-align:right;color:#B5342A">${fmt(s.retirado)}</td>
-    <td style="text-align:right;font-weight:800;color:${s.stock>0?"#059669":"#DC2626"}">${fmt(s.stock)}</td>
+    <td style="text-align:right">${s._tn?fmt(s.comprado,2):fmt(s.comprado)}</td>
+    <td style="text-align:right;color:#B5342A">${s._tn?fmt(s.retirado,2):fmt(s.retirado)}</td>
+    <td style="text-align:right;font-weight:800;color:${s.stock>0?"#059669":"#DC2626"}">${s._tn?fmt(s.stock,2):fmt(s.stock)}</td>
   </tr>`).join("");
 }
 
@@ -1021,11 +1025,13 @@ function getLoteHa(nombre) {
 }
 
 function renderLabores(){
-  const lote=gV("fl-lote"),tipo=gV("fl-tipo"),cont=gV("fl-cont");
+  const lote=gV("fl-lote"),tipo=gV("fl-tipo"),cont=gV("fl-cont"),cult=gV("fl-cult");
   popSel("fl-lote",DATA.labores.map(l=>l.lote));
+  popSel("fl-cult",DATA.labores.map(l=>l.cultivo));
   popSel("fl-tipo",DATA.labores.map(l=>l.tipo));
   popSel("fl-cont",DATA.labores.map(l=>l.contratista));
-  const f=DATA.labores.filter(l=>l.lote&&(!lote||l.lote===lote)&&(!tipo||l.tipo===tipo)&&(!cont||l.contratista===cont)).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  const fNoLote=DATA.labores.filter(l=>l.lote&&(!cult||l.cultivo===cult)&&(!tipo||l.tipo===tipo)&&(!cont||l.contratista===cont));
+  const f=fNoLote.filter(l=>!lote||l.lote===lote).sort((a,b)=>b.fecha.localeCompare(a.fecha));
 
   // Calcular costo insumos por labor: necesitamos precio de compra por insumo
   const precioIns = {};
@@ -1043,15 +1049,19 @@ function renderLabores(){
     return a + (Array.isArray(l.insumos)?l.insumos:[]).reduce((b,i)=>b+(i.cantidad||0)*(i.precio_usd_u||precioIns[i.nombre]||0),0);
   },0);
 
+  // Valores por hectárea: se divide por las ha de los lotes (una sola vez cada lote) que entran en el filtro
+  const lotesF=[...new Set(f.map(l=>l.lote))];
+  const haBase=lotesF.reduce((a,lt)=>a+(getLoteHa(lt)||0),0);
+  const perHa=v=>haBase>0?v/haBase:0;
   ge("kpi-labores").innerHTML=`
-    <div class="kpi" style="border-color:#2D6A4F"><div class="val">${f.length}</div><div class="lbl">Labores</div></div>
-    <div class="kpi" style="border-color:#C9A84C"><div class="val">USD ${fmt(totMO_USD,0)}</div><div class="lbl">Costo M.O. (USD)</div></div>
-    <div class="kpi" style="border-color:#1A4D7C"><div class="val">USD ${fmt(totIns_USD,0)}</div><div class="lbl">Costo insumos (USD)</div></div>
-    <div class="kpi" style="border-color:#8B5E3C"><div class="val">USD ${fmt(totMO_USD+totIns_USD,0)}</div><div class="lbl">Costo total (USD)</div></div>`;
+    <div class="kpi" style="border-color:#2D6A4F"><div class="val">${f.length}</div><div class="lbl">Labores · ${lotesF.length} lote${lotesF.length!==1?"s":""} · ${fmt(haBase,0)} ha</div></div>
+    <div class="kpi" style="border-color:#C9A84C"><div class="val">USD ${fmt(perHa(totMO_USD),1)}/ha</div><div class="lbl">Costo M.O. (USD/ha)</div></div>
+    <div class="kpi" style="border-color:#1A4D7C"><div class="val">USD ${fmt(perHa(totIns_USD),1)}/ha</div><div class="lbl">Costo insumos (USD/ha)</div></div>
+    <div class="kpi" style="border-color:#8B5E3C"><div class="val">USD ${fmt(perHa(totMO_USD+totIns_USD),1)}/ha</div><div class="lbl">Costo total (USD/ha)</div></div>`;
 
   // Gráfico: costo/ha MO + costo/ha insumos por lote (USD/ha)
   const byLote={};
-  DATA.labores.forEach(l=>{
+  fNoLote.forEach(l=>{
     if(!l.lote) return;
     const ha = getLoteHa(l.lote) || 1;
     const tc = l.tc || TC;
@@ -2257,11 +2267,52 @@ function showExtracDetalle(silobolsa, grano){
 function renderMargenBruto(){
   const cult = ge("fmg-cult")?.value||"";
   const lote = ge("fmg-lote")?.value||"";
+  const campSel = ge("fmg-camp");
+  // Si todavía no eligió campaña, se muestra la más reciente que tenga datos
+  if(campSel && !campSel.dataset.touched){
+    const last = ["2627","2526"].find(c=>MARGEN_DATA.some(r=>(r.campania||"2526")===c));
+    if(last) campSel.value = last;
+  }
+  const camp = campSel?.value||"2627";
+  const campLabel = {"2526":"25-26","2627":"26-27"};
+  const MD = MARGEN_DATA.filter(r=>(r.campania||"2526")===camp);
 
-  popSel("fmg-cult", MARGEN_DATA.map(r=>r.cultivo));
-  popSel("fmg-lote", MARGEN_DATA.map(r=>r.lote));
+  popSel("fmg-cult", MD.map(r=>r.cultivo));
+  popSel("fmg-lote", MD.map(r=>r.lote));
 
-  const f = MARGEN_DATA.filter(r=>
+  const nd = ge("mg-nodata");
+  if(nd){
+    nd.style.display = MD.length ? "none" : "block";
+    nd.innerHTML = "ℹ️ Todavía no hay datos de margen bruto para la campaña "+campLabel[camp]+"."+(camp==="2627"?" Cuando tengas la hoja de la campaña 26-27, pasame el link y las pestañas (gid) para conectarla.":"");
+  }
+
+  // ── Gráfico de líneas: MB U$D/Ha por cultivo, comparando campañas (promedio ponderado por ha) ──
+  const campsConDatos = ["2526","2627"].filter(c=>MARGEN_DATA.some(r=>(r.campania||"2526")===c));
+  const CULT_ORD = ["SOJA 1°","MAIZ","TRIGO","SOJA 2°"];
+  const lineCol = {"SOJA 1°":"#2D6A4F","MAIZ":"#E8A838","TRIGO":"#C9A84C","SOJA 2°":"#1A4D7C"};
+  dC("ch-margen-camp");
+  charts["ch-margen-camp"] = new Chart(ge("ch-margen-camp"),{
+    type:"line",
+    data:{
+      labels:["2526","2627"].map(c=>"Campaña "+campLabel[c]),
+      datasets: CULT_ORD.map(cv=>({
+        label:cv, borderColor:lineCol[cv], backgroundColor:lineCol[cv], tension:.25, spanGaps:false,
+        pointRadius:6, pointHoverRadius:8, borderWidth:3,
+        data:["2526","2627"].map(c=>{
+          const rows=MARGEN_DATA.filter(r=>(r.campania||"2526")===c && r.cultivo===cv);
+          const ha=rows.reduce((a,r)=>a+r.ha,0);
+          return ha>0 ? rows.reduce((a,r)=>a+r.mb_total,0)/ha : null;
+        })
+      }))
+    },
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:"bottom"},
+        tooltip:{callbacks:{label:c=>c.dataset.label+": U$D "+fmt(c.raw,1)+"/ha"}}},
+      scales:{y:{grid:{color:"#eee"},ticks:{callback:v=>"U$D "+fmt(v,0)}}}
+    }
+  });
+
+  const f = MD.filter(r=>
     (!cult||r.cultivo===cult) &&
     (!lote||r.lote===lote)
   ).sort((a,b)=>a.lote.localeCompare(b.lote)||a.cultivo.localeCompare(b.cultivo));
@@ -2436,13 +2487,29 @@ function renderFacturacion(){
     porCont[x.contratista].usd += x.ha_totales*x.precio_usd_ha;
   });
   const contRows = Object.values(porCont).sort((a,b)=>b.ha-a.ha);
-  ge("tb-fact-cont").innerHTML = contRows.length ? contRows.map(c=>`<tr>
-      <td><strong>${c.contratista}</strong></td>
+  // Dentro de cada contratista, se desglosa lo pendiente por labor (tipo de labor)
+  const porLabor = {};
+  baseContratista.forEach(x=>{
+    const k=x.contratista+"|"+(x.tipo||"Sin tipo");
+    if(!porLabor[k]) porLabor[k]={contratista:x.contratista,tipo:x.tipo||"Sin tipo",n:0,ha:0,ars:0,usd:0};
+    const o=porLabor[k]; o.n++; o.ha+=x.ha_totales; o.ars+=x.ha_totales*x.precio_ars_ha; o.usd+=x.ha_totales*x.precio_usd_ha;
+  });
+  const cell=(v,fn)=>v>0?fn(v):"—";
+  ge("tb-fact-cont").innerHTML = contRows.length ? contRows.map(c=>{
+    const labs=Object.values(porLabor).filter(l=>l.contratista===c.contratista).sort((a,b)=>b.ha-a.ha);
+    return `<tr style="background:#EEF7F2;font-weight:800">
+      <td><strong>${c.contratista}</strong></td><td style="color:#6b7280;font-weight:600">TOTAL</td>
       <td style="text-align:right">${c.n}</td>
-      <td style="text-align:right;font-weight:700;color:#C9A84C">${fmt(c.ha,1)}</td>
-      <td style="text-align:right">${c.ars>0?fmtP(c.ars):"—"}</td>
-      <td style="text-align:right">${c.usd>0?fmtU(c.usd):"—"}</td>
-    </tr>`).join("") : `<tr><td colspan="5" style="text-align:center;color:#6b7280;padding:16px">Sin pendientes 🎉</td></tr>`;
+      <td style="text-align:right;color:#B8962E">${fmt(c.ha,1)}</td>
+      <td style="text-align:right">${cell(c.ars,fmtP)}</td>
+      <td style="text-align:right">${cell(c.usd,fmtU)}</td></tr>`
+    + labs.map(l=>`<tr>
+      <td></td><td style="padding-left:18px"><span class="badge bg-verde">${l.tipo}</span></td>
+      <td style="text-align:right">${l.n}</td>
+      <td style="text-align:right;font-weight:700;color:#C9A84C">${fmt(l.ha,1)}</td>
+      <td style="text-align:right">${cell(l.ars,fmtP)}</td>
+      <td style="text-align:right">${cell(l.usd,fmtU)}</td></tr>`).join("");
+  }).join("") : `<tr><td colspan="6" style="text-align:center;color:#6b7280;padding:16px">Sin pendientes 🎉</td></tr>`;
 
   ge("tb-fact-det").innerHTML = f.length ? f.map(x=>{
     const fd = x.fecha && /^\d{4}-\d{2}-\d{2}/.test(x.fecha) ? x.fecha.substring(8,10)+"/"+x.fecha.substring(5,7)+"/"+x.fecha.substring(0,4) : (x.fecha||"—");
@@ -2638,6 +2705,9 @@ try{fetchTC();}catch(e){console.log("TC fetch failed",e);}
 // ── Cargar datos desde Google Sheets ─────────────────────────────────────────
 
 // ── Cargar datos desde Google Sheets via CSV público ─────────────────────────
+// Margen bruto — Campaña 26-27: completar con el ID de la hoja y el gid de cada pestaña cuando esté lista.
+// Mientras esté vacío, el selector de campaña muestra 26-27 sin datos.
+const MARGEN_2627 = { sheetId:"", gids:{ soja1:"", maiz:"", trigo:"", soja2:"" } };
 const SHEET_URLS = {
   Compras:  "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=948579892",
   Retiros:  "https://docs.google.com/spreadsheets/d/1faazJ472uuLxnZrwHqGOgrTZK20MI18CJVg9zYAD04c/export?format=csv&gid=1462828713",
@@ -3145,23 +3215,35 @@ async function loadFromSheets() {
     // El campo "CHACRA" en esas hojas representa Chacra Izquierda + Chacra Derecha
     // juntas (60 ha = 30+30), así que se aplica el mismo U$D/ha a ambos lotes reales,
     // con el total recalculado según las ha propias de cada uno.
-    const margenCruda = [
+    const splitChacra = (cruda, camp)=>{
+      const out = [];
+      cruda.forEach(r=>{
+        if(r.lote==="CHACRA"){
+          ["CHACRA IZQUIERDA","CHACRA DERECHA"].forEach(loteReal=>{
+            const haReal = LOTES_HA_MAP[loteReal]||(r.ha/2);
+            out.push({ ...r, lote:loteReal, ha:haReal, mb_total:r.mb_ha*haReal, campania:camp });
+          });
+        } else out.push({ ...r, campania:camp });
+      });
+      return out;
+    };
+    const margenFinal = splitChacra([
       ...parseMargenSheet(rawMargenSoja1, "SOJA 1°"),
       ...parseMargenSheet(rawMargenMaiz,  "MAIZ"),
       ...parseMargenSheet(rawMargenTrigo, "TRIGO"),
       ...parseMargenSheet(rawMargenSoja2, "SOJA 2°"),
-    ];
-    const margenFinal = [];
-    margenCruda.forEach(r=>{
-      if(r.lote==="CHACRA"){
-        ["CHACRA IZQUIERDA","CHACRA DERECHA"].forEach(loteReal=>{
-          const haReal = LOTES_HA_MAP[loteReal]||(r.ha/2);
-          margenFinal.push({ ...r, lote:loteReal, ha:haReal, mb_total:r.mb_ha*haReal });
-        });
-      } else {
-        margenFinal.push(r);
-      }
-    });
+    ], "2526");   // la hoja conectada hoy es "Campaña 25-26"
+    // Campaña 26-27 (si ya se configuró la hoja)
+    if(MARGEN_2627.sheetId){
+      try{
+        const g=MARGEN_2627.gids, base="https://docs.google.com/spreadsheets/d/"+MARGEN_2627.sheetId+"/export?format=csv&gid=";
+        const [m1,m2,m3,m4] = await Promise.all([g.soja1,g.maiz,g.trigo,g.soja2].map(id=>fetch(base+id).then(r=>r.text()).then(parseCSV)));
+        splitChacra([
+          ...parseMargenSheet(m1,"SOJA 1°"), ...parseMargenSheet(m2,"MAIZ"),
+          ...parseMargenSheet(m3,"TRIGO"),   ...parseMargenSheet(m4,"SOJA 2°"),
+        ],"2627").forEach(r=>margenFinal.push(r));
+      }catch(e){ console.warn("Margen 26-27 no se pudo leer:",e); }
+    }
     MARGEN_DATA.length = 0;
     margenFinal.forEach(r=>MARGEN_DATA.push(r));
     const LOTES_CONV_MAP = {
@@ -3615,13 +3697,14 @@ loadFromSheets();
     <button class="btn-cl" onclick="clrF(['ff-cont','ff-prod','ff-lote','ff-tipo'],renderFacturacion)">✕ Limpiar</button>
   </div>
   <div class="card" style="margin-bottom:14px">
-    <h3>🧾 Pendiente de facturar por Contratista</h3>
+    <h3>🧾 Pendiente de facturar por Contratista y Labor</h3>
     <div style="overflow-x:auto"><table><thead><tr>
-      <th onclick="sortTable('tb-fact-cont',0)" style="cursor:pointer">Contratista</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-cont',1,true)">Labores pendientes</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-cont',2,true)">Ha pendientes</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-cont',3,true)">Monto $ pendiente</th>
-      <th style="text-align:right;cursor:pointer" onclick="sortTable('tb-fact-cont',4,true)">Monto U$D pendiente</th>
+      <th>Contratista</th>
+      <th>Labor</th>
+      <th style="text-align:right">Labores pendientes</th>
+      <th style="text-align:right">Ha pendientes</th>
+      <th style="text-align:right">Monto $ pendiente</th>
+      <th style="text-align:right">Monto U$D pendiente</th>
     </tr></thead><tbody id="tb-fact-cont"></tbody></table></div>
   </div>
   <div class="card">
@@ -3649,9 +3732,17 @@ loadFromSheets();
 <div id="page-margen" class="page">
   <div class="kpi-row" id="kpi-margen"></div>
   <div class="filters">
+    <div><label>Campaña</label><select id="fmg-camp" onchange="this.dataset.touched=1;renderMargenBruto()">
+      <option value="2627">Campaña 26-27 (actual)</option><option value="2526">Campaña 25-26</option></select></div>
     <div><label>Cultivo</label><select id="fmg-cult" onchange="renderMargenBruto()"><option value="">Todos</option></select></div>
     <div><label>Lote</label><select id="fmg-lote" onchange="renderMargenBruto()"><option value="">Todos</option></select></div>
     <button class="btn-cl" onclick="clrF(['fmg-cult','fmg-lote'],renderMargenBruto)">✕ Limpiar</button>
+  </div>
+  <div id="mg-nodata" class="card" style="display:none;border-left:4px solid #C9A84C;font-size:12px;color:#6b7280"></div>
+  <div class="card" style="margin-bottom:14px">
+    <h3>📉 MB U$D/Ha por cultivo — comparativo entre campañas</h3>
+    <p style="font-size:11px;color:#6b7280;margin:-4px 0 12px">Promedio ponderado por hectárea de cada cultivo en cada campaña (considera todos los lotes).</p>
+    <div class="chart-wrap" style="height:300px"><canvas id="ch-margen-camp"></canvas></div>
   </div>
   <div class="card" style="margin-bottom:14px">
     <h3>Margen Bruto (U$D/Ha) por Lote</h3>
